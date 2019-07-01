@@ -12,11 +12,9 @@ from tqdm import tqdm
 import pathlib
 import datajoint as dj
 
-from . import get_schema_name
+from pipeline import lab, experiment
+from ingestion import get_schema_name
 
-
-lab = dj.create_virtual_module('lab', get_schema_name('lab'))
-experiment = dj.create_virtual_module('experiment', get_schema_name('experiment'))
 
 # ================== Ingestion of Metadata ==================
 

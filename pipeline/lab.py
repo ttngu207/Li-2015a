@@ -46,8 +46,8 @@ class Subject(dj.Manual):
     subject_id          : int   # institution 6 digit animal ID
     ---
     -> [nullable] Person        # person responsible for the animal
-    cage_number         : int   # institution 6 digit animal ID
-    date_of_birth       : date  # format: yyyy-mm-dd
+    cage_number=null    : int   # institution 6 digit animal ID
+    date_of_birth=null  : date  # format: yyyy-mm-dd
     sex                 : enum('M','F','Unknown')
     -> [nullable] AnimalSource  # where was the animal ordered from
     """
@@ -142,7 +142,11 @@ class BrainArea(dj.Lookup):
     ---
     description = null : varchar (4000) # name of the brain area
     """
-    contents = [('ALM', 'anterior lateral motor cortex'), ('vS1', 'vibrissal primary somatosensory cortex ("barrel cortex")'), ('Thalamus', 'Thalamus'), ('Medulla', 'Medulla'), ('Striatum', 'Striatum')]
+    contents = [('ALM', 'anterior lateral motor cortex'),
+                ('vS1', 'vibrissal primary somatosensory cortex ("barrel cortex")'),
+                ('Thalamus', 'Thalamus'),
+                ('Medulla', 'Medulla'),
+                ('Striatum', 'Striatum')]
     
     
 @schema

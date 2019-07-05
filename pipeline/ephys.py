@@ -76,10 +76,10 @@ class CellType(dj.Lookup):
     cell_type_description :  varchar(4000)
     """
     contents = [
-        ('Pyr', 'putative pyramidal'),
-        ('FS', 'fast spiking'),
-        ('not classified', 'intermediate spike-width that falls between spike-width thresholds for FS or Putative pyramidal cells'),
-        ('all', 'all types')
+        ('Pyr', 'putative pyramidal neuron'),
+        ('interneuron', 'interneuron'),
+        ('PT', 'pyramidal tract neuron'),
+        ('IT', 'intratelecephalic neuron')
     ]
 
 

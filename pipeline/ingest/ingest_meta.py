@@ -1,50 +1,152 @@
 import os, sys
-sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
 
 import re
-from datetime import datetime
-
-import numpy as np
-from decimal import Decimal
 import scipy.io as sio
-import pandas as pd
 from tqdm import tqdm
 import pathlib
+import numpy as np
 import datajoint as dj
 
-from pipeline import lab, experiment
-from ingestion import get_schema_name
+from pipeline import lab, experiment, ephys, virus
+from pipeline import parse_date
 
+# ==================== DEFINE CONSTANTS =====================
 
-# ================== Ingestion of Metadata ==================
+# ---- inferred from paper ----
+hemi = 'left'
+skull_reference = 'bregma'
+photostim_devices = {473: 'LaserGem473', 594: 'LaserCoboltMambo100'}
 
+# ---- from lookup ----
+probe = 'A4x8-5mm-100-200-177'
+electrode_config_name = 'silicon32'
+photostim_dur = 1.3
+
+# ================== INGESTION OF METADATA ==================
+
+# ---- delete all Sessions ----
+experiment.Session.delete()
+
+# ---- insert metadata ----
 meta_data_dir = pathlib.Path('data', 'meta_data')
-
 meta_data_files = meta_data_dir.glob('*.mat')
-for meta_data_file in meta_data_files:
+for meta_data_file in tqdm(meta_data_files):
     print(f'-- Read {meta_data_file} --')
     meta_data = sio.loadmat(meta_data_file, struct_as_record = False, squeeze_me=True)['meta_data']
 
-    # ---- subject ----
-    subject_key = dict(subject_id=int(re.search('\d+', meta_data.animalID).group()),
-                       cage_number=-1,
-                       date_of_birth=datetime.strptime(meta_data.dateOfBirth, '%Y%m%d'),
-                       sex=meta_data.sex.upper(),
-                       animal_source=meta_data.animalSource)
+    # ==================== person ====================
+    person_key = dict(username=meta_data.experimenters,
+                      fullname=meta_data.experimenters)
+    lab.Person.insert1(person_key, skip_duplicates=True)
 
-    # ---- subject gene modification ----
+    # ==================== subject gene modification ====================
+    modified_genes = (meta_data.animalGeneModification
+                      if isinstance(meta_data.animalGeneModification, (np.ndarray, list))
+                      else [meta_data.animalGeneModification])
+    lab.ModifiedGene.insert((dict(gene_modification=g, gene_modification_description=g)
+                             for g in modified_genes), skip_duplicates=True)
 
+    # ==================== subject strain ====================
+    animal_strains = (meta_data.animalStrain
+                      if isinstance(meta_data.animalStrain, (np.ndarray, list))
+                      else [meta_data.animalStrain])
+    lab.AnimalStrain.insert(zip(animal_strains), skip_duplicates=True)
 
+    # ==================== subject ====================
+    animal_id = (meta_data.animalID[0]
+                 if isinstance(meta_data.animalID, (np.ndarray, list)) else meta_data.animalID)
+    animal_source = (meta_data.animalSource[0]
+                     if isinstance(meta_data.animalSource, (np.ndarray, list)) else meta_data.animalSource)
+    subject_key = dict(subject_id=int(re.search('\d+', animal_id).group()),
+                       sex=meta_data.sex[0].upper() if len(meta_data.sex) != 0 else 'U',
+                       species=meta_data.species,
+                       animal_source=animal_source)
+    try:
+        date_of_birth = parse_date(meta_data.dateOfBirth)
+        subject_key['date_of_birth'] = date_of_birth
+    except:
+        pass
 
+    lab.AnimalSource.insert1((animal_source,), skip_duplicates=True)
 
+    with lab.Subject.connection.transaction:
+        if subject_key not in lab.Subject.proj():
+            lab.Subject.insert1(subject_key)
+            lab.Subject.GeneModification.insert((dict(subject_key, gene_modification=g) for g in modified_genes),
+                                                 ignore_extra_fields=True)
+            lab.Subject.Strain.insert((dict(subject_key, animal_strain=strain) for strain in animal_strains),
+                                                 ignore_extra_fields=True)
 
+    # ==================== session ====================
+    session_key = dict(subject_key, username=person_key['username'],
+                       session=len(experiment.Session & subject_key) + 1,
+                       session_date=parse_date(meta_data.dateOfExperiment + ' ' + meta_data.timeOfExperiment))
+    experiment.Session.insert1(session_key, ignore_extra_fields=True)
 
+    print(f'\tInsert Session - {session_key["subject_id"]} - {session_key["session_date"]}')
 
+    # ==================== Probe Insertion ====================
+    brain_location_key = (experiment.BrainLocation & dict(brain_area=meta_data.extracellular.recordingLocation,
+                                                          hemisphere=hemi,
+                                                          skull_reference=skull_reference)).fetch1('KEY')
+    insertion_loc_key = dict(brain_location_key,
+                             ml_location=meta_data.extracellular.recordingCoordinates[0] * 1000,  # mm to um
+                             ap_location=meta_data.extracellular.recordingCoordinates[1] * 1000,  # mm to um
+                             dv_location=meta_data.extracellular.recordingCoordinates[2])         # already in um
 
+    with ephys.ProbeInsertion.connection.transaction:
+        ephys.ProbeInsertion.insert1(dict(session_key, insertion_number=1, probe=probe,
+                                          electrode_config_name=electrode_config_name), ignore_extra_fields=True)
+        ephys.ProbeInsertion.InsertionLocation.insert1(dict(session_key, **insertion_loc_key,
+                                                            insertion_number=1, probe=probe,
+                                                            electrode_config_name=electrode_config_name),
+                                                       ignore_extra_fields=True)
 
+    print(f'\tInsert ProbeInsertion - Location: {brain_location_key["brain_location_name"]}')
 
+    # ==================== Virus ====================
+    if 'virus' in meta_data._fieldnames and isinstance(meta_data.virus, sio.matlab.mio5_params.mat_struct):
+        virus_info = dict(
+            virus_source=meta_data.virus.virusSource,
+            virus=meta_data.virus.virusID,
+            virus_lot_number=meta_data.virus.virusLotNumber if len(meta_data.virus.virusLotNumber) != 0 else '',
+            virus_titer=meta_data.virus.virusTiter.replace('x10', '') if meta_data.virus.virusTiter != 'untitered' else None)
+        virus.Virus.insert1(virus_info, skip_duplicates=True)
 
+        # -- BrainLocation
+        brain_location_key = (experiment.BrainLocation & {'brain_area': meta_data.virus.infectionLocation,
+                                                          'hemisphere': hemi,
+                                                          'skull_reference': skull_reference}).fetch1('KEY')
+        virus_injection = dict(
+            {**virus_info, **subject_key, **brain_location_key},
+            injection_date=parse_date(meta_data.virus.injectionDate))
 
+        virus.VirusInjection.insert([dict(virus_injection,
+                                          injection_id=inj_idx + 1,
+                                          ml_location = coord[0] * 1000,
+                                          ap_location = coord[1] * 1000,
+                                          dv_location = coord[2] * 1000,
+                                          injection_volume = vol)
+                                     for inj_idx, (coord, vol) in enumerate(zip(meta_data.virus.infectionCoordinates,
+                                                                                meta_data.virus.injectionVolume))],
+                                    ignore_extra_fields=True, skip_duplicates=True)
+        print(f'\tInsert Virus Injections - Count: {len(meta_data.virus.injectionVolume)}')
 
+    # ==================== Photostim ====================
+    if 'photostim' in meta_data._fieldnames and isinstance(meta_data.photostim, sio.matlab.mio5_params.mat_struct):
+        for stim_idx, (coord, loc) in enumerate(zip(meta_data.photostim.photostimCoordinates,
+                                                    meta_data.photostim.photostimLocation)):
+            brain_location_key = (experiment.BrainLocation & dict(brain_area=loc,
+                                                                  hemisphere='left' if coord[1] < 0 else 'right',
+                                                                  skull_reference=skull_reference)).fetch1('KEY')
+            experiment.Photostim.insert1(dict(
+                session_key, **brain_location_key,
+                photo_stim=stim_idx + 1,
+                photostim_device=photostim_devices[meta_data.photostim.photostimWavelength],
+                ml_location=coord[0] * 1000,
+                ap_location=coord[1] * 1000,
+                dv_location=coord[2] * 1000,
+                duration=photostim_dur), ignore_extra_fields=True)
 
-
+        print(f'\tInsert Photostim - Count: {len(meta_data.photostim.photostimLocation)}')

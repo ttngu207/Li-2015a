@@ -26,7 +26,7 @@ class Session(dj.Manual):
     ---
     session_date  : date
     -> lab.Person
-    -> lab.Rig
+    -> [nullable] lab.Rig
     """
 
 
@@ -62,7 +62,7 @@ class TaskProtocol(dj.Lookup):
          ('s1 stim', 5, 'mini-distractors, with different levels of the mini-stim during sample period'),
          ('s1 stim', 6, 'full distractors; same as protocol 4 but with a no-chirp trial-type'),
          ('s1 stim', 7, 'mini-distractors and full distractors (only at late delay)'),
-         ('s1 stim', 8, 'mini-distractors and full distractors (only at late delay), with different levels of the mini-stim and the full-stim during sample                 period'),
+         ('s1 stim', 8, 'mini-distractors and full distractors (only at late delay), with different levels of the mini-stim and the full-stim during sample period'),
          ('s1 stim', 9, 'mini-distractors and full distractors (only at late delay), with different levels of the mini-stim and the full-stim during sample period')
          ]
 
@@ -81,26 +81,10 @@ class Photostim(dj.Manual):
     dv_location=null: float # um from dura; ventral is positive; based on manipulator coordinates/reconstructed track
     ml_angle=null: float # Angle between the manipulator/reconstructed track and the Medio-Lateral axis. A tilt towards the right hemishpere is positive.
     ap_angle=null: float # Angle between the manipulator/reconstructed track and the Anterior-Posterior axis. An anterior tilt is positive.
-    duration=null:  decimal(8,4)   # (s)
+    duration=null:  float   # (s)
     waveform=null:  longblob       # normalized to maximal power. The value of the maximal power is specified for each PhotostimTrialEvent individually
+    frequency=null: float  # (Hz) 
     """
-
-    class Profile(dj.Part):
-        # NOT USED CURRENT
-        definition = """
-        -> master
-        (profile_x, profile_y, profile_z) -> ccf.CCF(ccf_x, ccf_y, ccf_z)
-        ---
-        intensity_timecourse   :  longblob  # (mW/mm^2)
-        """
-
-    # contents = [{
-    #     'photostim_device': 'OBIS470',
-    #     'photo_stim': 0,  # TODO: correct? whatmeens?
-    #     'duration': 0.5,
-    #     # FIXME/TODO: .3s of 40hz sin + .2s rampdown @ 100kHz. int32??
-    #     'waveform': np.zeros(int((0.3+0.2)*100000), np.int32)
-    # }]
 
 
 @schema
@@ -109,7 +93,7 @@ class SessionTrial(dj.Imported):
     -> Session
     trial : smallint 		# trial number
     ---
-    trial_uid : int  # unique across sessions/animals
+    trial_uid=null : int  # unique across sessions/animals
     start_time : decimal(8, 4)  # (s) relative to session beginning 
     stop_time : decimal(8, 4)  # (s) relative to session beginning 
     """
@@ -192,9 +176,9 @@ class Period(dj.Lookup):
 class TrialInstruction(dj.Lookup):
     definition = """
     # Instruction to mouse 
-    trial_instruction  : varchar(8) 
+    trial_instruction  : varchar(16) 
     """
-    contents = zip(('left', 'right'))
+    contents = zip(('left', 'right', 'non-performing'))
 
 
 @schema
@@ -202,7 +186,7 @@ class Outcome(dj.Lookup):
     definition = """
     outcome : varchar(32)
     """
-    contents = zip(('hit', 'miss', 'ignore'))
+    contents = zip(('hit', 'miss', 'ignore', 'non-performing'))
 
 
 @schema
@@ -246,7 +230,7 @@ class TrialEvent(dj.Imported):
     ---
     -> TrialEventType
     trial_event_time : decimal(8, 4)   # (s) from trial start, not session start
-    duration : decimal(8,4)  #  (s)  
+    duration=null: decimal(8,4)  #  (s)  
     """
 
 
@@ -288,8 +272,8 @@ class PhotostimEvent(dj.Imported):
     photostim_event_id: smallint
     ---
     -> Photostim
-    photostim_event_time : decimal(8,3)   # (s) from trial start
-    power : decimal(8,3)   # Maximal power (mW)
+    photostim_event_time=null: decimal(8,3)   # (s) from trial start
+    power=null : decimal(8,3)   # Maximal power (mW)
     """
 
 

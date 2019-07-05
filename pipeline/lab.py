@@ -22,6 +22,21 @@ class Rig(dj.Manual):
     rig_description : varchar(1024) 
     """
 
+@schema
+class Species(dj.Lookup):
+    definition = """
+    species: varchar(24)
+    """
+    contents = zip(['Mus musculus'])
+
+
+@schema
+class AnimalStrain(dj.Lookup):
+    definition = """
+    animal_strain       : varchar(30)
+    """
+    contents = zip(['pl56', 'kj18'])
+
 
 @schema
 class AnimalSource(dj.Lookup):
@@ -49,13 +64,21 @@ class Subject(dj.Manual):
     cage_number=null    : int   # institution 6 digit animal ID
     date_of_birth=null  : date  # format: yyyy-mm-dd
     sex                 : enum('M','F','Unknown')
+    -> Species
     -> [nullable] AnimalSource  # where was the animal ordered from
     """
+
+    class Strain(dj.Part):
+        definition = """
+        # Subject gene modifications
+        -> master
+        -> AnimalStrain
+        """
 
     class GeneModification(dj.Part):
         definition = """
         # Subject gene modifications
-        -> Subject
+        -> master
         -> ModifiedGene
         ---
         zygosity = 'Unknown' : enum('Het', 'Hom', 'Unknown')
@@ -93,7 +116,7 @@ class VirusSource(dj.Lookup):
     definition = """
     virus_source   : varchar(60)
     """
-    contents = zip(['Janelia', 'UPenn', 'Addgene', 'UNC', 'Other'])
+    contents = zip(['Janelia core', 'UPenn', 'Addgene', 'UNC', 'Other'])
 
 
 @schema
@@ -143,6 +166,8 @@ class BrainArea(dj.Lookup):
     description = null : varchar (4000) # name of the brain area
     """
     contents = [('ALM', 'anterior lateral motor cortex'),
+                ('M2', 'secondary motor cortex'),
+                ('PONS', 'pontine nucleus'),
                 ('vS1', 'vibrissal primary somatosensory cortex ("barrel cortex")'),
                 ('Thalamus', 'Thalamus'),
                 ('Medulla', 'Medulla'),
@@ -215,7 +240,7 @@ class ProbeType(dj.Lookup):
     probe_type: varchar(32)    
     """
 
-    contents = zip(['silicon_probe', 'tetrode_array', 'neuropixel'])
+    contents = zip(['nn_silicon_probe', 'tetrode_array', 'neuropixel'])
 
 
 @schema
@@ -270,7 +295,7 @@ class PhotostimDevice(dj.Lookup):
     excitation_wavelength :  decimal(5,1)  # (nm) 
     photostim_device_description : varchar(255)
     """
-    contents =[
-       ('LaserGem473', 473, 'Laser (Laser Quantum, Gem 473)'),
-       ('LED470', 470, 'LED (Thor Labs, M470F3 - 470 nm, 17.2 mW (Min) Fiber-Coupled LED)'),
-       ('OBIS470', 473, 'OBIS 473nm LX 50mW Laser System: Fiber Pigtail (Coherent Inc)')]
+    contents = [('LaserGem473', 473, 'Laser (Laser Quantum, Gem 473)'),
+                ('LaserCoboltMambo100', 594, 'Laser (Laser Quantum, Gem 473)'),
+                ('LED470', 470, 'LED (Thor Labs, M470F3 - 470 nm, 17.2 mW (Min) Fiber-Coupled LED)'),
+                ('OBIS470', 473, 'OBIS 473nm LX 50mW Laser System: Fiber Pigtail (Coherent Inc)')]

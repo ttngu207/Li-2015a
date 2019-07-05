@@ -2,20 +2,39 @@
 import logging
 
 import datajoint as dj
+from datetime import datetime
 import hashlib
 
 log = logging.getLogger(__name__)
 
 
+datetime_formats = ('%Y%m%d %H%M%S', '%Y%m%d')
+
+time_unit_conversion_factor = {'millisecond': 1e-3,
+                               'second': 1,
+                               'minute': 60,
+                               'hour': 3600,
+                               'day': 86400}
+
+def parse_date(text):
+    for fmt in datetime_formats:
+        cover = len(datetime.now().strftime(fmt))
+        try:
+            return datetime.strptime(text[:cover], fmt)
+        except ValueError:
+            pass
+    raise ValueError(f'no valid date format found - {text}')
+
+
+default_prefix = 'li2015_v1_'
 def get_schema_name(name):
     try:
         return dj.config['custom']['{}.database'.format(name)]
     except KeyError:
         if name.startswith('ingest'):
-            prefix = '{}_ingest_'.format(dj.config.get('database.user', 'map'))
+            prefix = '{}_ingest_'.format(dj.config.get('database.user', default_prefix))
         else:
-            prefix = 'map_v1_'
-
+            prefix = default_prefix
     return prefix + name
 
 

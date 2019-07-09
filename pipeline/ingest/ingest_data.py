@@ -9,115 +9,159 @@ from decimal import Decimal
 import datajoint as dj
 import numpy as np
 
-from pipeline import lab, experiment, ephys, virus
+from pipeline import lab, experiment, ephys, tracking
 from pipeline import parse_date, dict_to_hash, time_unit_conversion_factor
 
 
-# ==================== DEFINE CONSTANTS =====================
+def main(data_dir='./data/data_structure'):
+    data_dir = pathlib.Path(data_dir)
+    if not data_dir.exists():
+        raise FileNotFoundError(f'Path not found!! {data_dir.as_posix()}')
 
-trial_type_str = ['HitR', 'HitL', 'ErrR', 'ErrL', 'NoLickR', 'NoLickL']
-trial_type_mapper = {'HitR': ('hit', 'right'),
-                     'HitL': ('hit', 'left'),
-                     'ErrR': ('miss', 'right'),
-                     'ErrL': ('miss', 'left'),
-                     'NoLickR': ('ignore', 'right'),
-                     'NoLickL': ('ignore', 'left')}
+    # ==================== DEFINE CONSTANTS =====================
 
-photostim_mapper = {1: 'PONS', 2: 'ALM'}
+    trial_type_str = ['HitR', 'HitL', 'ErrR', 'ErrL', 'NoLickR', 'NoLickL']
+    trial_type_mapper = {'HitR': ('hit', 'right'),
+                         'HitL': ('hit', 'left'),
+                         'ErrR': ('miss', 'right'),
+                         'ErrL': ('miss', 'left'),
+                         'NoLickR': ('ignore', 'right'),
+                         'NoLickL': ('ignore', 'left')}
 
-post_resp_tlim = 2  # a trial may last at most 2 seconds after response cue
+    photostim_mapper = {1: 'PONS', 2: 'ALM'}
 
-task_protocol = {'task': 'audio delay', 'task_protocol': 1}
+    cell_type_mapper = {'pyramidal': 'Pyr', 'FS': 'FS'}
 
-# ================== INGESTION OF DATA ==================
+    post_resp_tlim = 2  # a trial may last at most 2 seconds after response cue
 
-data_dir = pathlib.Path('data', 'data_structure')
-data_files = data_dir.glob('*.mat')
+    task_protocol = {'task': 'audio delay', 'task_protocol': 1}
 
-for data_file in data_files:
-    fname = data_file.stem
-    subject_id = int(re.search('ANM\d+', fname).group().replace('ANM', ''))
-    session_date = parse_date(re.search('_\d+', fname).group().replace('_', ''))
+    clustering_method = 'manual'
+    
+    insert_kwargs = {'ignore_extra_fields': True, 'allow_direct_insert': True, 'skip_duplicates': True}
 
-    session_key = (experiment.Session & {'subject_id': subject_id, 'session_date': session_date}).fetch1('KEY')
+    # ================== INGESTION OF DATA ==================
+    data_files = data_dir.glob('*.mat')
 
-    print(f'-- Read {data_file} --')
-    print(f'\tMatched: {session_key}')
-    sess_data = sio.loadmat(data_file, struct_as_record = False, squeeze_me=True)['obj']
+    for data_file in data_files:
+        fname = data_file.stem
+        subject_id = int(re.search('ANM\d+', fname).group().replace('ANM', ''))
+        session_date = parse_date(re.search('_\d+', fname).group().replace('_', ''))
 
-    # get time conversion factor - (-1) to take into account Matlab's 1-based indexing
-    ts_time_conversion = time_unit_conversion_factor[
-        sess_data.timeUnitNames[sess_data.timeSeriesArrayHash.value.timeUnit - 1]]
-    trial_time_conversion = time_unit_conversion_factor[
-        sess_data.timeUnitNames[sess_data.trialTimeUnit - 1]]
+        session_key = (experiment.Session & {'subject_id': subject_id, 'session_date': session_date}).fetch1('KEY')
 
-    # time-series data
-    ts_tvec = sess_data.timeSeriesArrayHash.value.time * ts_time_conversion
-    ts_trial = sess_data.timeSeriesArrayHash.value.trial
-    lick_trace = sess_data.timeSeriesArrayHash.value.valueMatrix[:, 0]
-    aom_input_trace = sess_data.timeSeriesArrayHash.value.valueMatrix[:, 1]
-    laser_power = sess_data.timeSeriesArrayHash.value.valueMatrix[:, 2]
+        print(f'-- Read {data_file} --')
+        print(f'\tMatched: {session_key}')
+        sess_data = sio.loadmat(data_file, struct_as_record = False, squeeze_me=True)['obj']
 
-    # trial data
-    trial_zip = zip(sess_data.trialIds, sess_data.trialStartTimes * trial_time_conversion,
-                    sess_data.trialTypeMat[:6, :].T, sess_data.trialTypeMat[6, :].T,
-                    sess_data.trialPropertiesHash.value[0] * trial_time_conversion,
-                    sess_data.trialPropertiesHash.value[1] * trial_time_conversion,
-                    sess_data.trialPropertiesHash.value[2] * trial_time_conversion,
-                    sess_data.trialPropertiesHash.value[-1])
+        # get time conversion factor - (-1) to take into account Matlab's 1-based indexing
+        ts_time_conversion = time_unit_conversion_factor[
+            sess_data.timeUnitNames[sess_data.timeSeriesArrayHash.value.timeUnit - 1]]
+        trial_time_conversion = time_unit_conversion_factor[
+            sess_data.timeUnitNames[sess_data.trialTimeUnit - 1]]
+        unit_time_converstion = time_unit_conversion_factor[
+            sess_data.timeUnitNames[sess_data.eventSeriesHash.value[0].timeUnit - 1]]
 
-    photostims = (experiment.Photostim * experiment.BrainLocation & session_key)
+        # ---- time-series data ----
+        ts_tvec = sess_data.timeSeriesArrayHash.value.time * ts_time_conversion
+        ts_trial = sess_data.timeSeriesArrayHash.value.trial
+        lick_trace = sess_data.timeSeriesArrayHash.value.valueMatrix[:, 0]
+        aom_input_trace = sess_data.timeSeriesArrayHash.value.valueMatrix[:, 1]
+        laser_power = sess_data.timeSeriesArrayHash.value.valueMatrix[:, 2]
 
-    tr_start_idx = np.append(1, np.diff(ts_trial))
-    photostim_start = [laser_power[ts_trial == tr_id] for tr_id in sess_data.trialIds]
+        experiment.PhotostimTrace.insert1(dict(session_key,
+                                               aom_input_trace=aom_input_trace,
+                                               laser_power=laser_power,
+                                               photostim_timestamps=ts_tvec), **insert_kwargs)
+        tracking.LickTrace.insert1(dict(session_key,
+                                        lick_trace=lick_trace,
+                                        lick_trace_timestamps=ts_tvec), **insert_kwargs)
 
-    session_trials, behavior_trials, trial_events, photostim_trials, photostim_events = [], [], [], [], []
-    for (tr_id, tr_start, trial_type_mtx, is_early_lick,
-         sample_start, delay_start, response_start, photostim_type) in trial_zip:
+        # ---- trial data ----
+        trial_zip = zip(sess_data.trialIds, sess_data.trialStartTimes * trial_time_conversion,
+                        sess_data.trialTypeMat[:6, :].T, sess_data.trialTypeMat[6, :].T,
+                        sess_data.trialPropertiesHash.value[0] * trial_time_conversion,
+                        sess_data.trialPropertiesHash.value[1] * trial_time_conversion,
+                        sess_data.trialPropertiesHash.value[2] * trial_time_conversion,
+                        sess_data.trialPropertiesHash.value[-1])
 
-        tkey = dict(session_key, trial=tr_id,
-                    start_time=Decimal(tr_start),
-                    stop_time=Decimal(tr_start + response_start + post_resp_tlim))
-        session_trials.append(tkey)
+        photostims = (experiment.Photostim * experiment.BrainLocation & session_key)
 
-        trial_type = np.array(trial_type_str)[trial_type_mtx.astype(bool)]
-        if len(trial_type) == 1:
-            outcome, trial_instruction = trial_type_mapper[trial_type[0]]
-        else:
-            outcome, trial_instruction = 'non-performing', 'non-performing'
+        print('---- Ingesting trial data ----')
+        session_trials, behavior_trials, trial_events, photostim_trials, photostim_events = [], [], [], [], []
+        for (tr_id, tr_start, trial_type_mtx, is_early_lick,
+             sample_start, delay_start, response_start, photostim_type) in tqdm(trial_zip):
 
-        bkey = dict(tkey, **task_protocol,
-                    trial_instruction=trial_instruction,
-                    outcome=outcome,
-                    early_lick='early' if is_early_lick else 'no early')
-        behavior_trials.append(bkey)
+            tkey = dict(session_key, trial=tr_id,
+                        start_time=Decimal(tr_start),
+                        stop_time=Decimal(tr_start + response_start + post_resp_tlim))
+            session_trials.append(tkey)
 
-        for etype, etime in zip(('sample', 'delay', 'go'), (sample_start, delay_start, response_start)):
-            if not np.isnan(etime):
-                trial_events.append(dict(tkey, trial_event_id=len(trial_events)+1,
-                                         trial_event_type=etype, trial_event_time=etime))
+            trial_type = np.array(trial_type_str)[trial_type_mtx.astype(bool)]
+            if len(trial_type) == 1:
+                outcome, trial_instruction = trial_type_mapper[trial_type[0]]
+            else:
+                outcome, trial_instruction = 'non-performing', 'non-performing'
 
-        if photostim_type != 0:
-            pkey = dict(tkey)
-            photostim_trials.append(pkey)
-            if photostim_type in (1, 2):
-                photostim_key = (photostims & {'brain_area': photostim_mapper[photostim_type.astype(int)]}).fetch1('KEY')
-                stim_power = laser_power[ts_trial == tr_id]
-                photostim_events.append(dict(pkey, **photostim_key, photostim_event_id=len(photostim_events)+1, power=stim_power.max()))
+            bkey = dict(tkey, **task_protocol,
+                        trial_instruction=trial_instruction,
+                        outcome=outcome,
+                        early_lick='early' if is_early_lick else 'no early')
+            behavior_trials.append(bkey)
+
+            for etype, etime in zip(('sample', 'delay', 'go'), (sample_start, delay_start, response_start)):
+                if not np.isnan(etime):
+                    trial_events.append(dict(tkey, trial_event_id=len(trial_events)+1,
+                                             trial_event_type=etype, trial_event_time=etime))
+
+            if photostim_type != 0:
+                pkey = dict(tkey)
+                photostim_trials.append(pkey)
+                if photostim_type in (1, 2):
+                    photostim_key = (photostims & {'brain_area': photostim_mapper[photostim_type.astype(int)]}).fetch1('KEY')
+                    stim_power = laser_power[ts_trial == tr_id]
+                    photostim_events.append(dict(pkey, **photostim_key, photostim_event_id=len(photostim_events)+1,
+                                                 power=stim_power.max()))
+
+        # insert trial info
+        experiment.SessionTrial.insert(session_trials, **insert_kwargs)
+        experiment.BehaviorTrial.insert(behavior_trials, **insert_kwargs)
+        experiment.PhotostimTrial.insert(photostim_trials, **insert_kwargs)
+        experiment.TrialEvent.insert(trial_events, **insert_kwargs)
+        experiment.PhotostimEvent.insert(photostim_events, **insert_kwargs)
+
+        # ---- units ----
+        insert_key = (ephys.ProbeInsertion & session_key).fetch1()
+        ap, dv = (ephys.ProbeInsertion.InsertionLocation & session_key).fetch1('ap_location', 'dv_location')
+        e_sites = {e: (y - ap, z - dv) for e, y, z in
+                   zip(*(ephys.ProbeInsertion.ElectrodeSitePosition & session_key).fetch(
+                       'electrode', 'electrode_posy', 'electrode_posz'))}
+        tr_starts = {tr: float(stime) for tr, stime in
+                     zip(*(experiment.SessionTrial & session_key).fetch('trial', 'start_time'))}
+
+        print('---- Ingesting spike data ----')
+        unit_spikes, unit_cell_types, trial_spikes = [], [], []
+        for u_name, u_value in tqdm(zip(sess_data.eventSeriesHash.keyNames, sess_data.eventSeriesHash.value)):
+            unit = int(re.search('\d+', u_name).group())
+            electrode = np.unique(u_value.channel)[0]
+            spike_times = u_value.eventTimes * unit_time_converstion
+
+            unit_key = dict(insert_key, clustering_method=clustering_method, unit=unit)
+            unit_spikes.append(dict(unit_key, electrode_group=0, unit_quality='good',
+                                    electrode=electrode, unit_posx=e_sites[electrode][0], unit_posy=e_sites[electrode][1],
+                                    spike_times=spike_times, waveform=u_value.waveforms))
+            unit_cell_types.append(dict(unit_key, cell_type=(cell_type_mapper[u_value.cellType]
+                                                             if len(u_value.cellType) > 0 else 'N/A')))
+            trial_spikes += [dict(unit_key, trial=tr, spike_times=spike_times[u_value.eventTrials == tr] - tr_starts[tr])
+                             for tr in set(u_value.eventTrials) if tr in tr_starts]
+
+        ephys.Unit.insert(unit_spikes, **insert_kwargs)
+        ephys.UnitCellType.insert(unit_cell_types, **insert_kwargs)
+        ephys.TrialSpikes.insert(trial_spikes, **insert_kwargs)
 
 
-    # ---- insert TRIALS ----
-    experiment.SessionTrial.insert(session_trials, allow_direct_insert=True)
-    experiment.BehaviorTrial.insert(behavior_trials, allow_direct_insert=True)
-    experiment.PhotostimTrial.insert(photostim_trials, allow_direct_insert=True)
-    experiment.TrialEvent.insert(trial_events, allow_direct_insert=True)
-    experiment.PhotostimEvent.insert(photostim_events, allow_direct_insert=True)
-
-
-
-
-
-
-
-
-
+if __name__ == '__main__':
+    if len(sys.argv) > 1:
+        main(sys.argv[1])
+    else:
+        main()

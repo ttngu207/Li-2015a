@@ -2,7 +2,7 @@
 import datajoint as dj
 import numpy as np
 
-from . import lab, ccf
+from . import lab
 from . import get_schema_name
 
 schema = dj.schema(get_schema_name('experiment'))
@@ -88,6 +88,17 @@ class Photostim(dj.Manual):
 
 
 @schema
+class PhotostimTrace(dj.Imported):
+    definition = """
+    -> Session
+    ---
+    aom_input_trace: longblob  # voltage input to AOM
+    laser_power: longblob  # (mW) laser power delivered to tissue 
+    photostim_timestamps: longblob
+    """
+
+
+@schema
 class SessionTrial(dj.Imported):
     definition = """
     -> Session
@@ -95,7 +106,7 @@ class SessionTrial(dj.Imported):
     ---
     trial_uid=null : int  # unique across sessions/animals
     start_time : decimal(8, 4)  # (s) relative to session beginning 
-    stop_time : decimal(8, 4)  # (s) relative to session beginning 
+    stop_time=null: decimal(8, 4)  # (s) relative to session beginning 
     """
 
 

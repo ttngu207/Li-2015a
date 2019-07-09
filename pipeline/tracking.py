@@ -38,32 +38,42 @@ class Tracking(dj.Imported):
     -> experiment.SessionTrial
     -> TrackingDevice
     ---
-    tracking_samples:           int             # number of events (possibly frame number, relative to the start of the trial)
+    tracking_samples: int             # number of events (possibly frame number, relative to the start of the trial)
     """
 
     class NoseTracking(dj.Part):
         definition = """
-        -> Tracking
+        -> master
         ---
         nose_x:                 longblob        # nose x location (px)
         nose_y:                 longblob        # nose y location (px)
-        nose_likelihood:        longblob        # nose location likelyhood
+        nose_likelihood:        longblob        # nose location likelihood
         """
 
     class TongueTracking(dj.Part):
         definition = """
-        -> Tracking
+        -> master
         ---
         tongue_x:               longblob        # tongue x location (px)
         tongue_y:               longblob        # tongue y location (px)
-        tongue_likelihood:      longblob        # tongue location likelyhood
+        tongue_likelihood:      longblob        # tongue location likelihood
         """
 
     class JawTracking(dj.Part):
         definition = """
-        -> Tracking
+        -> master
         ---
         jaw_x:                  longblob        # jaw x location (px)
         jaw_y:                  longblob        # jaw y location (px)
-        jaw_likelihood:         longblob        # jaw location likelyhood
+        jaw_likelihood:         longblob        # jaw location likelihood
         """
+
+
+@schema
+class LickTrace(dj.Imported):
+    definition = """
+    -> experiment.Session
+    ---
+    lick_trace: longblob
+    lick_trace_timestamps: longblob
+    """

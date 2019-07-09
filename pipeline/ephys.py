@@ -1,13 +1,13 @@
 
 import datajoint as dj
 
-from . import lab, experiment, ccf
+from . import lab, experiment
 from . import get_schema_name
 
 import numpy as np
 
 schema = dj.schema(get_schema_name('ephys'))
-[lab, experiment, ccf]  # NOQA flake8
+[lab, experiment]  # NOQA flake8
 
 
 @schema
@@ -29,6 +29,16 @@ class ProbeInsertion(dj.Manual):
         dv_location=null: float # um from dura; ventral is positive; based on manipulator coordinates/reconstructed track
         ml_angle=null: float # Angle between the manipulator/reconstructed track and the Medio-Lateral axis. A tilt towards the right hemishpere is positive.
         ap_angle=null: float # Angle between the manipulator/reconstructed track and the Anterior-Posterior axis. An anterior tilt is positive. 
+        """
+
+    class ElectrodeSitePosition(dj.Part):
+        definition = """
+        -> master
+        -> lab.ElectrodeConfig.Electrode
+        ---
+        electrode_posx: float
+        electrode_posy: float
+        electrode_posz: float
         """
 
 
@@ -79,7 +89,9 @@ class CellType(dj.Lookup):
         ('Pyr', 'putative pyramidal neuron'),
         ('interneuron', 'interneuron'),
         ('PT', 'pyramidal tract neuron'),
-        ('IT', 'intratelecephalic neuron')
+        ('IT', 'intratelecephalic neuron'),
+        ('FS', 'fast spiking'),
+        ('N/A', 'unknown')
     ]
 
 
@@ -89,7 +101,7 @@ class ClusteringMethod(dj.Lookup):
     clustering_method: varchar(16)
     """
 
-    contents = zip(['jrclust', 'kilosort'])
+    contents = zip(['jrclust', 'kilosort', 'manual'])
 
 
 @schema
@@ -105,32 +117,16 @@ class Unit(dj.Imported):
     -> ClusteringMethod
     unit: smallint
     ---
-    unit_uid : int # unique across sessions/animals
+    unit_uid=null: int # unique across sessions/animals
     -> UnitQualityType
     -> lab.ElectrodeConfig.Electrode # site on the electrode for which the unit has the largest amplitude
     unit_posx : double # (um) estimated x position of the unit relative to probe's (0,0)
     unit_posy : double # (um) estimated y position of the unit relative to probe's (0,0)
     spike_times : longblob  # (s) from the start of the first data point used in clustering
-    unit_amp : double
-    unit_snr : double
-    waveform : blob # average spike waveform
+    unit_amp=null: double
+    unit_snr=null: double
+    waveform : longblob # spike waveform (#spike x #time)
     """
-
-    class UnitTrial(dj.Part):
-        definition = """
-        # Entries for trials a unit is in
-        -> master
-        -> experiment.SessionTrial
-        """
-
-    class UnitPosition(dj.Part):
-        definition = """
-        # Estimated unit position in the brain
-        -> master
-        -> ccf.CCF
-        ---
-        -> experiment.BrainLocation
-        """
 
 
 @schema
@@ -157,7 +153,7 @@ class TrialSpikes(dj.Computed):
     -> Unit
     -> experiment.SessionTrial
     ---
-    spike_times : longblob # (s) spike times for each trial, relative to go cue
+    spike_times : longblob # (s) spike times for each trial, relative to trial's start time
     """
 
 

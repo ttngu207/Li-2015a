@@ -146,10 +146,17 @@ def main(meta_data_dir='./data/meta_data'):
 
         # ==================== Photostim ====================
         if 'photostim' in meta_data._fieldnames and isinstance(meta_data.photostim, sio.matlab.mio5_params.mat_struct):
-            for stim_idx, (coord, loc) in enumerate(zip(meta_data.photostim.photostimCoordinates,
-                                                        meta_data.photostim.photostimLocation)):
+            photostim_locs = []
+            for ba in set(meta_data.photostim.photostimLocation):
+                coords = meta_data.photostim.photostimCoordinates[meta_data.photostim.photostimLocation == ba]
+                if len(coords) < 2:
+                    photostim_locs.append((ba, 'left' if coords[0][1] < 0 else 'right', coords[0]))
+                else:
+                    photostim_locs.append((ba, 'both', np.array([coords[0][0], abs(coords[0][1]), coords[0][2]])))
+
+            for stim_idx, (loc, hem, coord) in enumerate(photostim_locs):
                 brain_location_key = (experiment.BrainLocation & dict(brain_area=loc,
-                                                                      hemisphere='left' if coord[1] < 0 else 'right',
+                                                                      hemisphere=hem,
                                                                       skull_reference=skull_reference)).fetch1('KEY')
                 experiment.Photostim.insert1(dict(
                     session_key, **brain_location_key,

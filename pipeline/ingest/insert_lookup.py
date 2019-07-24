@@ -42,6 +42,10 @@ experiment.BrainLocation.insert1({'brain_location_name': 'right_m2',
                                   'brain_area': 'M2',
                                   'hemisphere': 'right',
                                   'skull_reference': 'Bregma'})
+experiment.BrainLocation.insert1({'brain_location_name': 'both_m2',
+                                  'brain_area': 'M2',
+                                  'hemisphere': 'both',
+                                  'skull_reference': 'Bregma'})
 experiment.BrainLocation.insert1({'brain_location_name': 'left_alm',
                                   'brain_area': 'ALM',
                                   'hemisphere': 'left',
@@ -50,6 +54,10 @@ experiment.BrainLocation.insert1({'brain_location_name': 'right_alm',
                                   'brain_area': 'ALM',
                                   'hemisphere': 'right',
                                   'skull_reference': 'Bregma'})
+experiment.BrainLocation.insert1({'brain_location_name': 'both_alm',
+                                  'brain_area': 'ALM',
+                                  'hemisphere': 'both',
+                                  'skull_reference': 'Bregma'})
 experiment.BrainLocation.insert1({'brain_location_name': 'left_pons',
                                   'brain_area': 'PONS',
                                   'hemisphere': 'left',
@@ -57,4 +65,8 @@ experiment.BrainLocation.insert1({'brain_location_name': 'left_pons',
 experiment.BrainLocation.insert1({'brain_location_name': 'right_pons',
                                   'brain_area': 'PONS',
                                   'hemisphere': 'right',
+                                  'skull_reference': 'Bregma'})
+experiment.BrainLocation.insert1({'brain_location_name': 'both_pons',
+                                  'brain_area': 'PONS',
+                                  'hemisphere': 'both',
                                   'skull_reference': 'Bregma'})

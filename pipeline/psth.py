@@ -59,15 +59,6 @@ class TrialCondition(dj.Lookup):
     def contents(self):
         contents_data = (
             {
-                'trial_condition_name': 'good_noearlylick_hit',
-                'trial_condition_func': '_get_trials_exclude_stim',
-                'trial_condition_arg': {
-                    'task': 'audio delay',
-                    'task_protocol': 1,
-                    'outcome': 'hit',
-                    'early_lick': 'no early'}
-            },
-            {
                 'trial_condition_name': 'good_noearlylick_left_hit',
                 'trial_condition_func': '_get_trials_exclude_stim',
                 'trial_condition_arg': {
@@ -169,7 +160,6 @@ class TrialCondition(dj.Lookup):
                     'trial_instruction': 'right'}
             },
         )
-        # generate key XXX: complicated why not just key from description?
         return ({**d, 'trial_condition_hash':
                  key_hash({'trial_condition_func': d['trial_condition_func'],
                            **d['trial_condition_arg']})}
@@ -335,9 +325,9 @@ class PeriodSelectivity(dj.Computed):
     -> experiment.Period
     ---
     -> Selectivity.proj(period_selectivity='selectivity')
-    ipsi_firing_rate:           float  # mean firing rate of all ipsi-trials
-    contra_firing_rate:         float  # mean firing rate of all contra-trials
-    p_value:                    float  # all trial spike rate t-test p-value
+    p_value=null:                    float  # all trial spike rate t-test p-value
+    ipsi_firing_rate=null:           float  # mean firing rate of all ipsi-trials
+    contra_firing_rate=null:         float  # mean firing rate of all contra-trials
     """
 
     alpha = 0.05  # default alpha value
@@ -366,6 +356,10 @@ class PeriodSelectivity(dj.Computed):
                        & {'task': 'audio delay'}
                        & {'early_lick': 'no early'}
                        & {'outcome': 'hit'}) - experiment.PhotostimEvent)
+
+        if not spikes_q:  # no spikes found
+            self.insert1({**key, 'period_selectivity': 'non-selective'})
+            return
 
         # and their corresponding behavior,
         lr = ['left', 'right']
@@ -412,7 +406,6 @@ class PeriodSelectivity(dj.Computed):
         freq_i_m = np.average(freq_i)
         freq_c_m = np.average(freq_c)
 
-
         pval = 1 if np.isnan(pval) else pval
         if pval > self.alpha:
             pref = 'non-selective'
@@ -420,13 +413,10 @@ class PeriodSelectivity(dj.Computed):
             pref = ('ipsi-selective' if freq_i_m > freq_c_m
                     else 'contra-selective')
 
-        self.insert1({
-            **key,
-            'period_selectivity': pref,
-            'ipsi_firing_rate': freq_i_m,
-            'contra_firing_rate': freq_c_m,
-            'p_value': pval
-        })
+        self.insert1({**key,'p_value': pval,
+                      'period_selectivity': pref,
+                      'ipsi_firing_rate': freq_i_m,
+                      'contra_firing_rate': freq_c_m})
 
 
 @schema

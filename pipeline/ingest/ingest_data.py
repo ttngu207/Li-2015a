@@ -20,6 +20,8 @@ def main(data_dir='./data/data_structure'):
 
     # ==================== DEFINE CONSTANTS =====================
 
+    session_suffixes = ['a', 'b', 'c', 'd', 'e']
+
     trial_type_str = ['HitR', 'HitL', 'ErrR', 'ErrL', 'NoLickR', 'NoLickL']
     trial_type_mapper = {'HitR': ('hit', 'right'),
                          'HitL': ('hit', 'left'),
@@ -30,7 +32,7 @@ def main(data_dir='./data/data_structure'):
 
     photostim_mapper = {1: 'PONS', 2: 'ALM'}
 
-    cell_type_mapper = {'pyramidal': 'Pyr', 'FS': 'FS'}
+    cell_type_mapper = {'pyramidal': 'Pyr', 'FS': 'FS', 'IT': 'IT', 'PT': 'PT'}
 
     post_resp_tlim = 2  # a trial may last at most 2 seconds after response cue
 
@@ -44,14 +46,29 @@ def main(data_dir='./data/data_structure'):
     data_files = data_dir.glob('*.mat')
 
     for data_file in data_files:
+        print(f'-- Read {data_file} --')
+
         fname = data_file.stem
         subject_id = int(re.search('ANM\d+', fname).group().replace('ANM', ''))
         session_date = parse_date(re.search('_\d+', fname).group().replace('_', ''))
 
-        session_key = (experiment.Session & {'subject_id': subject_id, 'session_date': session_date}).fetch1('KEY')
+        sessions = (experiment.Session & {'subject_id': subject_id, 'session_date': session_date})
+        if len(sessions) < 2:
+            session_key = sessions.fetch1('KEY')
+        else:
+            if fname[-1] in session_suffixes:
+                sess_num = sessions.fetch('session', order_by='session')
+                session_letter_mapper = {letter: s_no for letter, s_no in zip(session_suffixes, sess_num)}
+                session_key = (sessions & {'session': session_letter_mapper[fname[-1]]}).fetch1('KEY')
+            else:
+                raise Exception('Multiple sessions found for {fname}')
 
-        print(f'-- Read {data_file} --')
         print(f'\tMatched: {session_key}')
+
+        if ephys.TrialSpikes & session_key:
+            print('Data ingested, skipping over...')
+            continue
+
         sess_data = sio.loadmat(data_file, struct_as_record = False, squeeze_me=True)['obj']
 
         # get time conversion factor - (-1) to take into account Matlab's 1-based indexing
@@ -78,14 +95,14 @@ def main(data_dir='./data/data_structure'):
                                         lick_trace_timestamps=ts_tvec), **insert_kwargs)
 
         # ---- trial data ----
+        photostims = (experiment.Photostim * experiment.BrainLocation & session_key)
+
         trial_zip = zip(sess_data.trialIds, sess_data.trialStartTimes * trial_time_conversion,
                         sess_data.trialTypeMat[:6, :].T, sess_data.trialTypeMat[6, :].T,
                         sess_data.trialPropertiesHash.value[0] * trial_time_conversion,
                         sess_data.trialPropertiesHash.value[1] * trial_time_conversion,
                         sess_data.trialPropertiesHash.value[2] * trial_time_conversion,
                         sess_data.trialPropertiesHash.value[-1])
-
-        photostims = (experiment.Photostim * experiment.BrainLocation & session_key)
 
         print('---- Ingesting trial data ----')
         session_trials, behavior_trials, trial_events, photostim_trials, photostim_events = [], [], [], [], []
@@ -114,14 +131,16 @@ def main(data_dir='./data/data_structure'):
                     trial_events.append(dict(tkey, trial_event_id=len(trial_events)+1,
                                              trial_event_type=etype, trial_event_time=etime))
 
-            if photostim_type != 0:
+            if photostims and photostim_type != 0:
                 pkey = dict(tkey)
                 photostim_trials.append(pkey)
                 if photostim_type in (1, 2):
-                    photostim_key = (photostims & {'brain_area': photostim_mapper[photostim_type.astype(int)]}).fetch1('KEY')
-                    stim_power = laser_power[ts_trial == tr_id]
-                    photostim_events.append(dict(pkey, **photostim_key, photostim_event_id=len(photostim_events)+1,
-                                                 power=stim_power.max()))
+                    photostim_key = (photostims & {'brain_area': photostim_mapper[photostim_type.astype(int)]})
+                    if photostim_key:
+                        photostim_key = photostim_key.fetch1('KEY')
+                        stim_power = laser_power[ts_trial == tr_id]
+                        photostim_events.append(dict(pkey, **photostim_key, photostim_event_id=len(photostim_events)+1,
+                                                     power=stim_power.max() if len(stim_power) > 0 else None))
 
         # insert trial info
         experiment.SessionTrial.insert(session_trials, **insert_kwargs)
@@ -136,8 +155,9 @@ def main(data_dir='./data/data_structure'):
         e_sites = {e: (y - ap, z - dv) for e, y, z in
                    zip(*(ephys.ProbeInsertion.ElectrodeSitePosition & session_key).fetch(
                        'electrode', 'electrode_posy', 'electrode_posz'))}
-        tr_starts = {tr: float(stime) for tr, stime in
-                     zip(*(experiment.SessionTrial & session_key).fetch('trial', 'start_time'))}
+        tr_events = {tr: (float(stime), float(gotime)) for tr, stime, gotime in
+                     zip(*(experiment.SessionTrial * experiment.TrialEvent
+                           & session_key & 'trial_event_type = "go"').fetch('trial', 'start_time', 'trial_event_time'))}
 
         print('---- Ingesting spike data ----')
         unit_spikes, unit_cell_types, trial_spikes = [], [], []
@@ -150,10 +170,14 @@ def main(data_dir='./data/data_structure'):
             unit_spikes.append(dict(unit_key, electrode_group=0, unit_quality='good',
                                     electrode=electrode, unit_posx=e_sites[electrode][0], unit_posy=e_sites[electrode][1],
                                     spike_times=spike_times, waveform=u_value.waveforms))
-            unit_cell_types.append(dict(unit_key, cell_type=(cell_type_mapper[u_value.cellType]
-                                                             if len(u_value.cellType) > 0 else 'N/A')))
-            trial_spikes += [dict(unit_key, trial=tr, spike_times=spike_times[u_value.eventTrials == tr] - tr_starts[tr])
-                             for tr in set(u_value.eventTrials) if tr in tr_starts]
+            unit_cell_types += [dict(unit_key, cell_type=(cell_type_mapper[cell_type] if len(cell_type) > 0 else 'N/A'))
+                                for cell_type in (u_value.cellType
+                                                  if isinstance(u_value.cellType, (list, np.ndarray))
+                                                  else [u_value.cellType])]
+            # get trial's spike times, shift by start-time, then by go-time -> align to go-time
+            trial_spikes += [dict(unit_key, trial=tr, spike_times=(spike_times[u_value.eventTrials == tr]
+                                                                   - tr_events[tr][0] - tr_events[tr][1]))
+                             for tr in set(u_value.eventTrials) if tr in tr_events]
 
         ephys.Unit.insert(unit_spikes, **insert_kwargs)
         ephys.UnitCellType.insert(unit_cell_types, **insert_kwargs)

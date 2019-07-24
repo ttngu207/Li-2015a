@@ -141,7 +141,6 @@ class UnitComment(dj.Manual):
 class UnitCellType(dj.Computed):
     definition = """
     -> Unit
-    ---
     -> CellType
     """
 
@@ -153,7 +152,7 @@ class TrialSpikes(dj.Computed):
     -> Unit
     -> experiment.SessionTrial
     ---
-    spike_times : longblob # (s) spike times for each trial, relative to trial's start time
+    spike_times : longblob # (s) spike times for each trial, relative to go cue
     """
 
 

@@ -4,6 +4,8 @@ import logging
 import datajoint as dj
 from datetime import datetime
 import hashlib
+import numpy as np
+from scipy import signal
 
 log = logging.getLogger(__name__)
 
@@ -92,3 +94,11 @@ def dict_to_hash(key):
     for k, v in sorted(key.items()):
         hashed.update(str(v).encode())
     return hashed.hexdigest()
+
+
+def _smooth(data, window_size=None):
+
+    window_size = int(.03 * len(data)) if not window_size else int(window_size)
+    kernel = np.full((window_size, ), 1/window_size)
+
+    return signal.convolve(data, kernel, mode='same')

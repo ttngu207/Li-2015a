@@ -6,8 +6,11 @@ import itertools
 import pandas as pd
 
 from pipeline import experiment, ephys, psth
+from pipeline import _smooth
 
 m_scale = 1200
+_plt_xmin = -3
+_plt_xmax = 2
 
 
 def plot_clustering_quality(probe_insertion):
@@ -298,9 +301,14 @@ def plot_avg_contra_ipsi_psth(units, axs=None):
     ymax = max([ax.get_ylim()[1] for ax in axs])
     for ax in axs:
         ax.set_ylim((0, ymax))
+        ax.set_xlim([_plt_xmin, _plt_xmax])
 
 
-def plot_psth_bilateral_photostim_effect(units, axs=None):
+def plot_psth_photostim_effect(units, condition_name_kw=['both_alm'], axs=None):
+    """
+    For the specified `units`, plot PSTH comparison between stim vs. no-stim with left/right trial instruction
+    The stim location (or other appropriate search keywords) can be specified in `condition_name_kw` (default: bilateral ALM)
+    """
     units = units.proj()
 
     if axs is None:
@@ -313,27 +321,32 @@ def plot_psth_bilateral_photostim_effect(units, axs=None):
                      & 'period in ("sample", "delay", "response")').fetch(
                          'period_start')
 
-    psth_s_l = (psth.UnitPsth * psth.TrialCondition & units
-                & {'trial_condition_name':
-                   'all_noearlylick_both_alm_stim_left'}).fetch('unit_psth')
+    # no photostim:
+    psth_n_l = psth.TrialCondition.get_cond_name_from_keywords(['_nostim', '_left'])[0]
+    psth_n_r = psth.TrialCondition.get_cond_name_from_keywords(['_nostim', '_right'])[0]
 
     psth_n_l = (psth.UnitPsth * psth.TrialCondition & units
-                & {'trial_condition_name':
-                   'all_noearlylick_both_alm_nostim_left'}).fetch('unit_psth')
-
-    psth_s_r = (psth.UnitPsth * psth.TrialCondition & units
-                & {'trial_condition_name':
-                   'all_noearlylick_both_alm_stim_right'}).fetch('unit_psth')
-
+                & {'trial_condition_name': psth_n_l} & 'unit_psth is not NULL').fetch('unit_psth')
     psth_n_r = (psth.UnitPsth * psth.TrialCondition & units
-                & {'trial_condition_name':
-                   'all_noearlylick_both_alm_nostim_right'}).fetch('unit_psth')
+                & {'trial_condition_name': psth_n_r} & 'unit_psth is not NULL').fetch('unit_psth')
 
-    # get photostim duration
-    stim_durs = np.unique((experiment.Photostim & experiment.PhotostimEvent
-                           * psth.TrialCondition().get_trials('all_noearlylick_both_alm_stim')
-                           & units).fetch('duration'))
-    stim_dur = _extract_one_stim_dur(stim_durs)
+    psth_s_l = psth.TrialCondition.get_cond_name_from_keywords(condition_name_kw + ['_stim_left'])[0]
+    psth_s_r = psth.TrialCondition.get_cond_name_from_keywords(condition_name_kw + ['_stim_right'])[0]
+
+    psth_s_l = (psth.UnitPsth * psth.TrialCondition & units
+                & {'trial_condition_name': psth_s_l} & 'unit_psth is not NULL').fetch('unit_psth')
+    psth_s_r = (psth.UnitPsth * psth.TrialCondition & units
+                & {'trial_condition_name': psth_s_r} & 'unit_psth is not NULL').fetch('unit_psth')
+
+    # get photostim duration and stim time (relative to go-cue)
+    stim_trial_cond_name = psth.TrialCondition.get_cond_name_from_keywords(condition_name_kw + ['_stim'])[0]
+    stim_times, stim_durs = (experiment.PhotostimEvent
+                             * (experiment.TrialEvent & 'trial_event_type = "go"').proj(..., '-duration')
+                             * psth.TrialCondition().get_trials(stim_trial_cond_name)
+                             & units).proj('duration', stim_time='photostim_event_time - trial_event_time').fetch(
+        'stim_time', 'duration')
+    stim_dur = _extract_one_stim_dur(np.unique(stim_durs))
+    stim_time = np.nanmean(stim_times.astype(np.float))
 
     if hemi == 'left':
         psth_s_i = psth_s_l
@@ -349,17 +362,16 @@ def plot_psth_bilateral_photostim_effect(units, axs=None):
     _plot_avg_psth(psth_n_i, psth_n_c, period_starts, axs[0],
                    'Control')
     _plot_avg_psth(psth_s_i, psth_s_c, period_starts, axs[1],
-                   'Bilateral ALM photostim')
+                   'Photostim')
 
     # cosmetic
     ymax = max([ax.get_ylim()[1] for ax in axs])
     for ax in axs:
         ax.set_ylim((0, ymax))
+        ax.set_xlim([_plt_xmin, _plt_xmax])
 
     # add shaded bar for photostim
-    delay = (experiment.Period  # TODO: use from period_starts
-             & 'period = "delay"').fetch1('period_start')
-    axs[1].axvspan(delay, delay + stim_dur, alpha=0.3, color='royalblue')
+    axs[1].axvspan(stim_time, stim_time + stim_dur, alpha=0.3, color='royalblue')
 
 
 def plot_coding_direction(units, time_period=None, axs=None):
@@ -452,8 +464,8 @@ def _plot_avg_psth(ipsi_psth, contra_psth, vlines={}, ax=None, title=''):
         np.array([i[0] for i in ipsi_psth])).mean(axis=0)
     ipsi_edges = ipsi_psth[0][1][:-1]
 
-    ax.plot(contra_edges, avg_contra_psth, 'b', label='contra')
-    ax.plot(ipsi_edges, avg_ipsi_psth, 'r', label='ipsi')
+    ax.plot(contra_edges, _smooth(avg_contra_psth), 'b', label='contra')
+    ax.plot(ipsi_edges, _smooth(avg_ipsi_psth), 'r', label='ipsi')
 
     for x in vlines:
         ax.axvline(x=x, linestyle='--', color='k')

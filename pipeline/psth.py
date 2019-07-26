@@ -14,6 +14,7 @@ import scipy.stats as sc_stats
 from . import lab
 from . import experiment
 from . import ephys
+from . import _smooth
 [lab, experiment, ephys]  # NOQA
 
 from . import get_schema_name
@@ -99,37 +100,17 @@ class TrialCondition(dj.Lookup):
                     'trial_instruction': 'right'}
             },
             {
-                'trial_condition_name': 'all_noearlylick_both_alm_stim',
-                'trial_condition_func': '_get_trials_include_stim',
-                'trial_condition_arg': {
-                    '_outcome': 'ignore',
-                    'task': 'audio delay',
-                    'task_protocol': 1,
-                    'early_lick': 'no early',
-                    'brain_location_name': 'both_alm'}
-            },
-            {
-                'trial_condition_name': 'all_noearlylick_both_alm_nostim',
+                'trial_condition_name': 'all_noearlylick_nostim',
                 'trial_condition_func': '_get_trials_exclude_stim',
                 'trial_condition_arg': {
                     '_outcome': 'ignore',
                     'task': 'audio delay',
                     'task_protocol': 1,
-                    'early_lick': 'no early'}
-            },
-            {
-                'trial_condition_name': 'all_noearlylick_both_alm_stim_left',
-                'trial_condition_func': '_get_trials_include_stim',
-                'trial_condition_arg': {
-                    '_outcome': 'ignore',
-                    'task': 'audio delay',
-                    'task_protocol': 1,
                     'early_lick': 'no early',
-                    'trial_instruction': 'left',
-                    'brain_location_name': 'both_alm'}
+                    '_trial_instruction': 'non-performing'}
             },
             {
-                'trial_condition_name': 'all_noearlylick_both_alm_nostim_left',
+                'trial_condition_name': 'all_noearlylick_nostim_left',
                 'trial_condition_func': '_get_trials_exclude_stim',
                 'trial_condition_arg': {
                     '_outcome': 'ignore',
@@ -139,18 +120,7 @@ class TrialCondition(dj.Lookup):
                     'trial_instruction': 'left'}
             },
             {
-                'trial_condition_name': 'all_noearlylick_both_alm_stim_right',
-                'trial_condition_func': '_get_trials_include_stim',
-                'trial_condition_arg': {
-                    '_outcome': 'ignore',
-                    'task': 'audio delay',
-                    'task_protocol': 1,
-                    'early_lick': 'no early',
-                    'trial_instruction': 'right',
-                    'brain_location_name': 'both_alm'}
-            },
-            {
-                'trial_condition_name': 'all_noearlylick_both_alm_nostim_right',
+                'trial_condition_name': 'all_noearlylick_nostim_right',
                 'trial_condition_func': '_get_trials_exclude_stim',
                 'trial_condition_arg': {
                     '_outcome': 'ignore',
@@ -158,7 +128,7 @@ class TrialCondition(dj.Lookup):
                     'task_protocol': 1,
                     'early_lick': 'no early',
                     'trial_instruction': 'right'}
-            },
+            }
         )
         return ({**d, 'trial_condition_hash':
                  key_hash({'trial_condition_func': d['trial_condition_func'],
@@ -166,13 +136,27 @@ class TrialCondition(dj.Lookup):
                 for d in contents_data)
 
     @classmethod
+    def insert_trial_conditions(cls, contents_data):
+        cls.insert(({**d, 'trial_condition_hash': key_hash({'trial_condition_func': d['trial_condition_func'],
+                                                            **d['trial_condition_arg']})}
+                    for d in contents_data), skip_duplicates=True)
+
+    @classmethod
     def get_trials(cls, trial_condition_name):
         return cls.get_func({'trial_condition_name': trial_condition_name})()
 
     @classmethod
+    def get_cond_name_from_keywords(cls, keywords):
+        matched_cond_names = []
+        for cond_name in cls.fetch('trial_condition_name'):
+            match = np.array([k in cond_name for k in keywords])
+            if match.all():
+                matched_cond_names.append(cond_name)
+        return sorted(matched_cond_names)
+
+    @classmethod
     def get_func(cls, key):
         self = cls()
-
         func, args = (self & key).fetch1(
             'trial_condition_func', 'trial_condition_arg')
 
@@ -180,7 +164,7 @@ class TrialCondition(dj.Lookup):
 
     @classmethod
     def _get_trials_exclude_stim(cls, **kwargs):
-
+        # Note: inclusion (attr) is AND - exclusion (_attr) is OR
         log.debug('_get_trials_exclude_stim: {}'.format(kwargs))
 
         restr, _restr = {}, {}
@@ -190,7 +174,7 @@ class TrialCondition(dj.Lookup):
             else:
                 restr[k] = v
 
-        stim_attrs = set(experiment.Photostim.heading.names) - set(experiment.Session.heading.names)
+        stim_attrs = set((experiment.Photostim * experiment.PhotostimEvent).heading.names) - set(experiment.Session.heading.names)
         behav_attrs = set(experiment.BehaviorTrial.heading.names)
 
         _stim_key = {k: v for k, v in _restr.items() if k in stim_attrs}
@@ -199,12 +183,12 @@ class TrialCondition(dj.Lookup):
         stim_key = {k: v for k, v in restr.items() if k in stim_attrs}
         behav_key = {k: v for k, v in restr.items() if k in behav_attrs}
 
-        return (((experiment.BehaviorTrial & behav_key) - (_behav_key if _behav_key else [])) -
-                (experiment.PhotostimEvent * (experiment.Photostim & stim_key) - (_stim_key if _stim_key else [])).proj())
+        return (((experiment.BehaviorTrial & behav_key) - [{k: v} for k, v in _behav_key.items()]) -
+                ((experiment.PhotostimEvent * experiment.Photostim & stim_key) - [{k: v} for k, v in _stim_key.items()]).proj())
 
     @classmethod
     def _get_trials_include_stim(cls, **kwargs):
-
+        # Note: inclusion (attr) is AND - exclusion (_attr) is OR
         log.debug('_get_trials_include_stim: {}'.format(kwargs))
 
         restr, _restr = {}, {}
@@ -214,7 +198,7 @@ class TrialCondition(dj.Lookup):
             else:
                 restr[k] = v
 
-        stim_attrs = set(experiment.Photostim.heading.names) - set(experiment.Session.heading.names)
+        stim_attrs = set((experiment.Photostim * experiment.PhotostimEvent).heading.names) - set(experiment.Session.heading.names)
         behav_attrs = set(experiment.BehaviorTrial.heading.names)
 
         _stim_key = {k: v for k, v in _restr.items() if k in stim_attrs}
@@ -223,8 +207,8 @@ class TrialCondition(dj.Lookup):
         stim_key = {k: v for k, v in restr.items() if k in stim_attrs}
         behav_key = {k: v for k, v in restr.items() if k in behav_attrs}
 
-        return (((experiment.BehaviorTrial & behav_key) - (_behav_key if _behav_key else [])) &
-                (experiment.PhotostimEvent * (experiment.Photostim & stim_key) - (_stim_key if _stim_key else [])).proj())
+        return (((experiment.BehaviorTrial & behav_key) - [{k: v} for k, v in _behav_key.items()]) &
+                ((experiment.PhotostimEvent * experiment.Photostim & stim_key) - [{k: v} for k, v in _stim_key.items()]).proj())
 
 
 @schema
@@ -278,7 +262,7 @@ class UnitPsth(dj.Computed):
           {
              'trials': ephys.TrialSpikes.trials,
              'spikes': ephys.TrialSpikes.spikes,
-             'psth': UnitPsth.unit_psth,
+             'psth': UnitPsth.unit_psth - smoothed,
              'raster': Spike * Trial raster [np.array, np.array]
           }
         """
@@ -289,7 +273,7 @@ class UnitPsth(dj.Computed):
 
         trials = TrialCondition.get_func(condition_key)()
 
-        psth = (UnitPsth & {**condition_key, **unit_key}).fetch1()['unit_psth']
+        psth, edges = (UnitPsth & {**condition_key, **unit_key}).fetch1()['unit_psth']
 
         spikes, trials = (ephys.TrialSpikes & trials & unit_key).fetch(
             'spike_times', 'trial', order_by='trial asc')
@@ -297,8 +281,8 @@ class UnitPsth(dj.Computed):
         raster = [np.concatenate(spikes),
                   np.concatenate([[t] * len(s)
                                   for s, t in zip(spikes, trials)])]
-
-        return dict(trials=trials, spikes=spikes, psth=psth, raster=raster)
+        psth = _smooth(psth)
+        return dict(trials=trials, spikes=spikes, psth=(psth, edges[1:]), raster=raster)
 
 
 @schema

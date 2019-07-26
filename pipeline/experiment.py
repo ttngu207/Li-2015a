@@ -81,7 +81,6 @@ class Photostim(dj.Manual):
     dv_location=null: float # um from dura; ventral is positive; based on manipulator coordinates/reconstructed track
     ml_angle=null: float # Angle between the manipulator/reconstructed track and the Medio-Lateral axis. A tilt towards the right hemishpere is positive.
     ap_angle=null: float # Angle between the manipulator/reconstructed track and the Anterior-Posterior axis. An anterior tilt is positive.
-    duration=null:  float   # (s)
     waveform=null:  longblob       # normalized to maximal power. The value of the maximal power is specified for each PhotostimTrialEvent individually
     frequency=null: float  # (Hz) 
     """
@@ -277,24 +276,24 @@ class PhotostimTrial(dj.Imported):
 
 
 @schema
+class PhotostimPeriod(dj.Lookup):
+    definition = """
+    photostim_period: varchar(16)
+    """
+
+    contents = zip(['sample', 'early_delay', 'middle_delay'])
+
+
+@schema
 class PhotostimEvent(dj.Imported):
     definition = """
     -> PhotostimTrial
     photostim_event_id: smallint
     ---
     -> Photostim
-    photostim_event_time=null: decimal(8,3)   # (s) from trial start
-    power=null : decimal(8,3)   # Maximal power (mW)
+    photostim_event_time=null: float    # (s) relative to trial start
+    power=null : float                  # (mW) Maximal power 
+    duration=null: float                # (s)
+    stim_spot_count=null: int           # number of laser spot of photostimulation
+    -> [nullable] PhotostimPeriod 
     """
-
-
-@schema
-class PassivePhotostimTrial(dj.Computed):
-    definition = """
-    -> SessionTrial
-    """
-    key_source = PhotostimTrial() - BehaviorTrial()
-
-    def make(self, key):
-        self.insert1(key)
-

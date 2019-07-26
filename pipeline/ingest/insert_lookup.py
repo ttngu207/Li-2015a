@@ -1,14 +1,8 @@
 import os, sys
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
 
-import re
-import scipy.io as sio
-from tqdm import tqdm
-import pathlib
-import datajoint as dj
-
-from pipeline import lab, experiment, ephys, virus
-from pipeline import parse_date, dict_to_hash
+from pipeline import lab, experiment, psth
+from pipeline import dict_to_hash
 
 
 # ================== DEFINE LOOK-UP ==================
@@ -17,8 +11,8 @@ from pipeline import parse_date, dict_to_hash
 # Probe - NeuroNexus Silicon Probe
 probe = 'A4x8-5mm-100-200-177'
 lab.Probe.insert1({'probe': probe,
-                   'probe_type': 'nn_silicon_probe'})
-lab.Probe.Electrode.insert({'probe': probe, 'electrode': x} for x in range(1, 33))
+                   'probe_type': 'nn_silicon_probe'}, skip_duplicates=True)
+lab.Probe.Electrode.insert(({'probe': probe, 'electrode': x} for x in range(1, 33)), skip_duplicates=True)
 
 electrode_group = {'probe': probe, 'electrode_group': 0}
 electrode_group_member = [{**electrode_group, 'electrode': chn} for chn in range(1, 33)]
@@ -27,46 +21,71 @@ electrode_config_hash = dict_to_hash(
     {**electrode_group, **{str(idx): k for idx, k in enumerate(electrode_group_member)}})
 lab.ElectrodeConfig.insert1({'probe': probe,
                              'electrode_config_hash': electrode_config_hash,
-                             'electrode_config_name': electrode_config_name})
+                             'electrode_config_name': electrode_config_name}, skip_duplicates=True)
 lab.ElectrodeConfig.ElectrodeGroup.insert1({'electrode_config_name': electrode_config_name,
-                                            **electrode_group})
-lab.ElectrodeConfig.Electrode.insert({'electrode_config_name': electrode_config_name, **member}
-                                     for member in electrode_group_member)
+                                            **electrode_group}, skip_duplicates=True)
+lab.ElectrodeConfig.Electrode.insert(({'electrode_config_name': electrode_config_name, **member}
+                                     for member in electrode_group_member), skip_duplicates=True)
 
 # ==================== Brain Location =====================
-experiment.BrainLocation.insert1({'brain_location_name': 'left_m2',
-                                  'brain_area': 'M2',
-                                  'hemisphere': 'left',
-                                  'skull_reference': 'Bregma'})
-experiment.BrainLocation.insert1({'brain_location_name': 'right_m2',
-                                  'brain_area': 'M2',
-                                  'hemisphere': 'right',
-                                  'skull_reference': 'Bregma'})
-experiment.BrainLocation.insert1({'brain_location_name': 'both_m2',
-                                  'brain_area': 'M2',
-                                  'hemisphere': 'both',
-                                  'skull_reference': 'Bregma'})
-experiment.BrainLocation.insert1({'brain_location_name': 'left_alm',
-                                  'brain_area': 'ALM',
-                                  'hemisphere': 'left',
-                                  'skull_reference': 'Bregma'})
-experiment.BrainLocation.insert1({'brain_location_name': 'right_alm',
-                                  'brain_area': 'ALM',
-                                  'hemisphere': 'right',
-                                  'skull_reference': 'Bregma'})
-experiment.BrainLocation.insert1({'brain_location_name': 'both_alm',
-                                  'brain_area': 'ALM',
-                                  'hemisphere': 'both',
-                                  'skull_reference': 'Bregma'})
-experiment.BrainLocation.insert1({'brain_location_name': 'left_pons',
-                                  'brain_area': 'PONS',
-                                  'hemisphere': 'left',
-                                  'skull_reference': 'Bregma'})
-experiment.BrainLocation.insert1({'brain_location_name': 'right_pons',
-                                  'brain_area': 'PONS',
-                                  'hemisphere': 'right',
-                                  'skull_reference': 'Bregma'})
-experiment.BrainLocation.insert1({'brain_location_name': 'both_pons',
-                                  'brain_area': 'PONS',
-                                  'hemisphere': 'both',
-                                  'skull_reference': 'Bregma'})
+brain_locations = [{'brain_location_name': 'left_m2',
+                    'brain_area': 'M2',
+                    'hemisphere': 'left',
+                    'skull_reference': 'Bregma'},
+                   {'brain_location_name': 'right_m2',
+                    'brain_area': 'M2',
+                    'hemisphere': 'right',
+                    'skull_reference': 'Bregma'},
+                   {'brain_location_name': 'both_m2',
+                    'brain_area': 'M2',
+                    'hemisphere': 'both',
+                    'skull_reference': 'Bregma'},
+                   {'brain_location_name': 'left_alm',
+                    'brain_area': 'ALM',
+                    'hemisphere': 'left',
+                    'skull_reference': 'Bregma'},
+                   {'brain_location_name': 'right_alm',
+                    'brain_area': 'ALM',
+                    'hemisphere': 'right',
+                    'skull_reference': 'Bregma'},
+                   {'brain_location_name': 'both_alm',
+                    'brain_area': 'ALM',
+                    'hemisphere': 'both',
+                    'skull_reference': 'Bregma'},
+                   {'brain_location_name': 'left_pons',
+                    'brain_area': 'PONS',
+                    'hemisphere': 'left',
+                    'skull_reference': 'Bregma'},
+                   {'brain_location_name': 'right_pons',
+                    'brain_area': 'PONS',
+                    'hemisphere': 'right',
+                    'skull_reference': 'Bregma'},
+                   {'brain_location_name': 'both_pons',
+                    'brain_area': 'PONS',
+                    'hemisphere': 'both',
+                    'skull_reference': 'Bregma'}]
+experiment.BrainLocation.insert(brain_locations, skip_duplicates=True)
+
+# ==================== Photostim Trial Condition =====================
+
+stim_locs = ['left_alm', 'right_alm', 'both_alm']
+stim_periods = [None, 'sample', 'early_delay', 'middle_delay']
+
+trial_conditions = []
+for loc in stim_locs:
+    for period in stim_periods:
+        for instruction in (None, 'left', 'right'):
+            condition = {'trial_condition_name': '_'.join(filter(None, ['all', 'noearlylick', loc, period, 'stim', instruction])),
+                         'trial_condition_func': '_get_trials_include_stim',
+                         'trial_condition_arg': {
+                             **{'_outcome': 'ignore',
+                                'task': 'audio delay',
+                                'task_protocol': 1,
+                                'early_lick': 'no early',
+                                'brain_location_name': loc},
+                             **({'trial_instruction': instruction} if instruction else {'_trial_instruction': 'non-performing'}),
+                             **({'photostim_period': period} if period else dict())}}
+            trial_conditions.append(condition)
+
+psth.TrialCondition.insert_trial_conditions(trial_conditions)
+

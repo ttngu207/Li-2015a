@@ -2,7 +2,6 @@
 import numpy as np
 
 import matplotlib.pyplot as plt
-from scipy import signal
 
 from pipeline.psth import TrialCondition
 from pipeline.psth import UnitPsth
@@ -40,8 +39,8 @@ def _plot_psth(ipsi, contra, vlines=[], ax=None, title=''):
     if not ax:
        fig, ax = plt.subplots(1, 1)
 
-    ax.plot(contra['psth'][1][1:], _smooth(contra['psth'][0]), 'b')
-    ax.plot(ipsi['psth'][1][1:], _smooth(ipsi['psth'][0]), 'r')
+    ax.plot(contra['psth'][1], contra['psth'][0], 'b')
+    ax.plot(ipsi['psth'][1], ipsi['psth'][0], 'r')
 
     for x in vlines:
         ax.axvline(x=x, linestyle='--', color='k')
@@ -87,10 +86,3 @@ def plot_default_unit_psth(unit_key):
                        vlines=period_starts, title=f'Unit #: {unit_key["unit"]}')
     _plot_psth(ipsi_hit_unit_psth, contra_hit_unit_psth, vlines=period_starts, ax=axs[1])
 
-
-def _smooth(data, window_size=None):
-
-    window_size = int(.03 * len(data)) if not window_size else int(window_size)
-    kernel = np.full((window_size, ), 1/window_size)
-
-    return signal.convolve(data, kernel, mode='same')

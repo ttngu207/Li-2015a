@@ -22,12 +22,11 @@ def main(meta_data_dir='./data/meta_data'):
     # ---- inferred from paper ----
     hemi = 'left'
     skull_reference = 'bregma'
-    photostim_devices = {473: 'LaserGem473', 594: 'LaserCoboltMambo100'}
+    photostim_devices = {473: 'LaserGem473', 594: 'LaserCoboltMambo100',  596: 'LaserCoboltMambo100'}
 
     # ---- from lookup ----
     probe = 'A4x8-5mm-100-200-177'
     electrode_config_name = 'silicon32'
-    photostim_dur = 1.3
 
     # ================== INGESTION OF METADATA ==================
 
@@ -146,12 +145,18 @@ def main(meta_data_dir='./data/meta_data'):
 
         # ==================== Photostim ====================
         if 'photostim' in meta_data._fieldnames and isinstance(meta_data.photostim, sio.matlab.mio5_params.mat_struct):
+            photostimLocation = (meta_data.photostim.photostimLocation
+                                 if isinstance(meta_data.photostim.photostimLocation, np.ndarray)
+                                 else np.array([meta_data.photostim.photostimLocation]))
+            photostimCoordinates = (meta_data.photostim.photostimCoordinates
+                                    if isinstance(meta_data.photostim.photostimCoordinates[0], np.ndarray)
+                                    else np.array([meta_data.photostim.photostimCoordinates]))
             photostim_locs = []
-            for ba in set(meta_data.photostim.photostimLocation):
-                coords = meta_data.photostim.photostimCoordinates[meta_data.photostim.photostimLocation == ba]
-                if len(coords) < 2:
-                    photostim_locs.append((ba, 'left' if coords[0][1] < 0 else 'right', coords[0]))
-                else:
+            for ba in set(photostimLocation):
+                coords = photostimCoordinates[photostimLocation == ba]
+                for coord in coords:
+                    photostim_locs.append((ba, 'left' if coord[1] < 0 else 'right', coord))
+                if len(coords) > 1:
                     photostim_locs.append((ba, 'both', np.array([coords[0][0], abs(coords[0][1]), coords[0][2]])))
 
             for stim_idx, (loc, hem, coord) in enumerate(photostim_locs):
@@ -164,8 +169,7 @@ def main(meta_data_dir='./data/meta_data'):
                     photostim_device=photostim_devices[meta_data.photostim.photostimWavelength],
                     ml_location=coord[0] * 1000,
                     ap_location=coord[1] * 1000,
-                    dv_location=coord[2] * 1000,
-                    duration=photostim_dur), ignore_extra_fields=True)
+                    dv_location=coord[2] * 1000), ignore_extra_fields=True)
 
             print(f'\tInsert Photostim - Count: {len(meta_data.photostim.photostimLocation)}')
 

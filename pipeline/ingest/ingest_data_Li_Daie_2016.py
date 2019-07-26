@@ -6,11 +6,10 @@ import scipy.io as sio
 from tqdm import tqdm
 import pathlib
 from decimal import Decimal
-import datajoint as dj
 import numpy as np
 
-from pipeline import lab, experiment, ephys, tracking
-from pipeline import parse_date, dict_to_hash, time_unit_conversion_factor
+from pipeline import experiment, ephys, tracking
+from pipeline import parse_date, time_unit_conversion_factor
 
 
 def main(data_dir='./data/data_structure'):
@@ -30,7 +29,24 @@ def main(data_dir='./data/data_structure'):
                          'NoLickR': ('ignore', 'right'),
                          'NoLickL': ('ignore', 'left')}
 
-    photostim_mapper = {1: 'PONS', 2: 'ALM'}
+    photostim_mapper = {1: {'brain_area': 'alm', 'hemi': 'left', 'duration': 0.5, 'spot': 1,
+                            'pre_go_end_time': 1.6, 'period': 'sample'},
+                        2: {'brain_area': 'alm', 'hemi': 'left', 'duration': 0.5, 'spot': 1,
+                            'pre_go_end_time': 0.8, 'period': 'early_delay'},
+                        3: {'brain_area': 'alm', 'hemi': 'left', 'duration': 0.5, 'spot': 1,
+                            'pre_go_end_time': 0.3, 'period': 'middle_delay'},
+                        4: {'brain_area': 'alm', 'hemi': 'left', 'duration': 0.8, 'spot': 1,
+                            'pre_go_end_time': 0.8, 'period': 'early_delay'},
+                        5: {'brain_area': 'alm', 'hemi': 'right', 'duration': 0.8, 'spot': 1,
+                            'pre_go_end_time': 0.8, 'period': 'early_delay'},
+                        6: {'brain_area': 'alm', 'hemi': 'both', 'duration': 0.8, 'spot': 4,
+                            'pre_go_end_time': 0.8, 'period': 'early_delay'},
+                        7: {'brain_area': 'alm', 'hemi': 'both', 'duration': 0.8, 'spot': 1,
+                            'pre_go_end_time': 0.8, 'period': 'early_delay'},
+                        8: {'brain_area': 'alm', 'hemi': 'left', 'duration': 0.8, 'spot': 4,
+                            'pre_go_end_time': 0.8, 'period': 'early_delay'},
+                        9: {'brain_area': 'alm', 'hemi': 'right', 'duration': 0.8, 'spot': 4,
+                            'pre_go_end_time': 0.8, 'period': 'early_delay'}}
 
     cell_type_mapper = {'pyramidal': 'Pyr', 'FS': 'FS', 'IT': 'IT', 'PT': 'PT'}
 
@@ -134,13 +150,22 @@ def main(data_dir='./data/data_structure'):
             if photostims and photostim_type != 0:
                 pkey = dict(tkey)
                 photostim_trials.append(pkey)
-                if photostim_type in (1, 2):
-                    photostim_key = (photostims & {'brain_area': photostim_mapper[photostim_type.astype(int)]})
+                photostim_type = photostim_type.astype(int)
+                if photostim_type in photostim_mapper:
+                    photstim_detail = photostim_mapper[photostim_type]
+                    photostim_key = (photostims & {'brain_area': photstim_detail['brain_area'],
+                                                   'hemisphere': photstim_detail['hemi']})
                     if photostim_key:
                         photostim_key = photostim_key.fetch1('KEY')
                         stim_power = laser_power[ts_trial == tr_id]
-                        photostim_events.append(dict(pkey, **photostim_key, photostim_event_id=len(photostim_events)+1,
-                                                     power=stim_power.max() if len(stim_power) > 0 else None))
+                        stim_power = np.where(np.isinf(stim_power), 0, stim_power)  # handle cases where stim power is Inf
+                        photostim_events.append(dict(
+                            pkey, **photostim_key, photostim_event_id=len(photostim_events)+1,
+                            power=stim_power.max() if len(stim_power) > 0 else None,
+                            duration=photstim_detail['duration'],
+                            photostim_event_time=response_start - photstim_detail['pre_go_end_time'] - photstim_detail['duration'],
+                            stim_spot_count=photstim_detail['spot'],
+                            photostim_period=photstim_detail['period']))
 
         # insert trial info
         experiment.SessionTrial.insert(session_trials, **insert_kwargs)

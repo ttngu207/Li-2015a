@@ -28,7 +28,7 @@ def parse_date(text):
     raise ValueError(f'no valid date format found - {text}')
 
 
-default_prefix = 'li2015_v1_'
+default_prefix = dj.config['custom'].get('database.prefix', 'li2015_v1_')
 def get_schema_name(name):
     try:
         return dj.config['custom']['{}.database'.format(name)]

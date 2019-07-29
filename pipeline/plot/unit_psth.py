@@ -6,13 +6,14 @@ import matplotlib.pyplot as plt
 from pipeline.psth import TrialCondition
 from pipeline.psth import UnitPsth
 from pipeline import ephys, experiment
+from pipeline.plot import _get_photostim_time_and_duration
 
 
 _plt_xmin = -3
 _plt_xmax = 2
 
 
-def _plot_spike_raster(ipsi, contra, vlines=[], ax=None, title=''):
+def _plot_spike_raster(ipsi, contra, vlines=[], shade_bar=None, ax=None, title=''):
     if not ax:
        fig, ax = plt.subplots(1, 1)
 
@@ -29,13 +30,15 @@ def _plot_spike_raster(ipsi, contra, vlines=[], ax=None, title=''):
 
     for x in vlines:
         ax.axvline(x=x, linestyle='--', color='k')
+    if shade_bar is not None:
+        ax.axvspan(shade_bar[0], shade_bar[0] + shade_bar[1], alpha = 0.3, color = 'royalblue')
 
     ax.set_axis_off()
     ax.set_xlim([_plt_xmin, _plt_xmax])
     ax.set_title(title)
 
 
-def _plot_psth(ipsi, contra, vlines=[], ax=None, title=''):
+def _plot_psth(ipsi, contra, vlines=[], shade_bar=None, ax=None, title=''):
     if not ax:
        fig, ax = plt.subplots(1, 1)
 
@@ -44,6 +47,8 @@ def _plot_psth(ipsi, contra, vlines=[], ax=None, title=''):
 
     for x in vlines:
         ax.axvline(x=x, linestyle='--', color='k')
+    if shade_bar is not None:
+        ax.axvspan(shade_bar[0], shade_bar[0] + shade_bar[1], alpha = 0.3, color = 'royalblue')
 
     ax.set_ylabel('spikes/s')
     ax.spines["top"].set_visible(False)
@@ -54,7 +59,7 @@ def _plot_psth(ipsi, contra, vlines=[], ax=None, title=''):
     ax.set_title(title)
 
 
-def plot_default_unit_psth(unit_key):
+def plot_unit_psth(unit_key, condition_name_kw=['good_noearlylick_', '_hit'], axs=None):
     """
     Default raster and PSTH plot for a specified unit - only {good, no early lick, correct trials} selected
     """
@@ -62,27 +67,33 @@ def plot_default_unit_psth(unit_key):
     hemi = (ephys.ProbeInsertion.InsertionLocation
             * experiment.BrainLocation & unit_key).fetch1('hemisphere')
 
-    ipsi_hit_cond_key = (TrialCondition
-                         & {'trial_condition_name': ('good_noearlylick_left_hit'
-                                                     if hemi == 'left' else 'good_noearlylick_right_hit')}).fetch1('KEY')
-
-    contra_hit_cond_key = (TrialCondition
-                           & {'trial_condition_name': ('good_noearlylick_right_hit'
-                                                       if hemi == 'left' else 'good_noearlylick_left_hit')}).fetch1('KEY')
+    ipsi_cond_name = TrialCondition.get_cond_name_from_keywords(condition_name_kw
+                                                                + ['left' if hemi == 'left' else 'right'])[0]
+    contra_cond_name = TrialCondition.get_cond_name_from_keywords(condition_name_kw
+                                                                  + ['right' if hemi == 'left' else 'left'])[0]
 
     ipsi_hit_unit_psth = UnitPsth.get_plotting_data(
-        unit_key, ipsi_hit_cond_key)
+        unit_key, {'trial_condition_name': ipsi_cond_name})
 
     contra_hit_unit_psth = UnitPsth.get_plotting_data(
-        unit_key, contra_hit_cond_key)
+        unit_key, {'trial_condition_name': contra_cond_name})
 
     period_starts = (experiment.Period
                      & 'period in ("sample", "delay", "response")').fetch(
                          'period_start')
 
-    fig, axs = plt.subplots(2, 1)
+    # photostim shaded bar (if applicable)
+    try:
+        stim_trial_cond_name = TrialCondition.get_cond_name_from_keywords(condition_name_kw + ['_stim'])[0]
+        stim_bar = _get_photostim_time_and_duration(unit_key, TrialCondition().get_trials(stim_trial_cond_name))
+    except:
+        stim_bar = None
+
+    if axs is None:
+        fig, axs = plt.subplots(2, 1)
 
     _plot_spike_raster(ipsi_hit_unit_psth, contra_hit_unit_psth, ax=axs[0],
-                       vlines=period_starts, title=f'Unit #: {unit_key["unit"]}')
-    _plot_psth(ipsi_hit_unit_psth, contra_hit_unit_psth, vlines=period_starts, ax=axs[1])
+                       vlines=period_starts, shade_bar=stim_bar, title=f'Unit #: {unit_key["unit"]}')
+    _plot_psth(ipsi_hit_unit_psth, contra_hit_unit_psth,
+               vlines=period_starts, shade_bar=stim_bar, ax=axs[1])
 

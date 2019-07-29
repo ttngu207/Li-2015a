@@ -96,7 +96,7 @@ def dict_to_hash(key):
     return hashed.hexdigest()
 
 
-def _smooth(data, window_size=None):
+def smooth_psth(data, window_size=None):
 
     window_size = int(.03 * len(data)) if not window_size else int(window_size)
     kernel = np.full((window_size, ), 1/window_size)

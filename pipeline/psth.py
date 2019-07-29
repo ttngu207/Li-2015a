@@ -14,7 +14,7 @@ import scipy.stats as sc_stats
 from . import lab
 from . import experiment
 from . import ephys
-from . import _smooth
+from . import smooth_psth
 [lab, experiment, ephys]  # NOQA
 
 from . import get_schema_name
@@ -149,8 +149,15 @@ class TrialCondition(dj.Lookup):
     def get_cond_name_from_keywords(cls, keywords):
         matched_cond_names = []
         for cond_name in cls.fetch('trial_condition_name'):
-            match = np.array([k in cond_name for k in keywords])
-            if match.all():
+            match = True
+            tmp_cond = cond_name
+            for k in keywords:
+                if k in tmp_cond:
+                    tmp_cond = tmp_cond.replace(k, '')
+                else:
+                    match = False
+                    break
+            if match:
                 matched_cond_names.append(cond_name)
         return sorted(matched_cond_names)
 
@@ -273,7 +280,11 @@ class UnitPsth(dj.Computed):
 
         trials = TrialCondition.get_func(condition_key)()
 
-        psth, edges = (UnitPsth & {**condition_key, **unit_key}).fetch1()['unit_psth']
+        unit_psth = (UnitPsth & {**condition_key, **unit_key}).fetch1()['unit_psth']
+        if unit_psth is None:
+            raise Exception('No spikes found for this unit and trial-condition')
+
+        psth, edges = unit_psth
 
         spikes, trials = (ephys.TrialSpikes & trials & unit_key).fetch(
             'spike_times', 'trial', order_by='trial asc')
@@ -281,7 +292,7 @@ class UnitPsth(dj.Computed):
         raster = [np.concatenate(spikes),
                   np.concatenate([[t] * len(s)
                                   for s, t in zip(spikes, trials)])]
-        psth = _smooth(psth)
+        psth = smooth_psth(psth)
         return dict(trials=trials, spikes=spikes, psth=(psth, edges[1:]), raster=raster)
 
 

@@ -102,14 +102,6 @@ def main(data_dir='./data/data_structure'):
         aom_input_trace = sess_data.timeSeriesArrayHash.value.valueMatrix[:, 1]
         laser_power = sess_data.timeSeriesArrayHash.value.valueMatrix[:, 2]
 
-        experiment.PhotostimTrace.insert1(dict(session_key,
-                                               aom_input_trace=aom_input_trace,
-                                               laser_power=laser_power,
-                                               photostim_timestamps=ts_tvec), **insert_kwargs)
-        tracking.LickTrace.insert1(dict(session_key,
-                                        lick_trace=lick_trace,
-                                        lick_trace_timestamps=ts_tvec), **insert_kwargs)
-
         # ---- trial data ----
         photostims = (experiment.Photostim * experiment.BrainLocation & session_key)
 
@@ -121,13 +113,15 @@ def main(data_dir='./data/data_structure'):
                         sess_data.trialPropertiesHash.value[-1])
 
         print('---- Ingesting trial data ----')
-        session_trials, behavior_trials, trial_events, photostim_trials, photostim_events = [], [], [], [], []
+        (session_trials, behavior_trials, trial_events, photostim_trials,
+         photostim_events, photostim_traces, lick_traces) = [], [], [], [], [], [], []
+
         for (tr_id, tr_start, trial_type_mtx, is_early_lick,
              sample_start, delay_start, response_start, photostim_type) in tqdm(trial_zip):
 
             tkey = dict(session_key, trial=tr_id,
                         start_time=Decimal(tr_start),
-                        stop_time=Decimal(tr_start + response_start + post_resp_tlim))
+                        stop_time=Decimal(tr_start + (0 if np.isnan(response_start) else response_start) + post_resp_tlim))
             session_trials.append(tkey)
 
             trial_type = np.array(trial_type_str)[trial_type_mtx.astype(bool)]
@@ -141,6 +135,9 @@ def main(data_dir='./data/data_structure'):
                         outcome=outcome,
                         early_lick='early' if is_early_lick else 'no early')
             behavior_trials.append(bkey)
+
+            lick_traces.append(dict(bkey, lick_trace=lick_trace[ts_trial == tr_id],
+                                    lick_trace_timestamps=ts_tvec[ts_trial == tr_id] - tr_start))
 
             for etype, etime in zip(('sample', 'delay', 'go'), (sample_start, delay_start, response_start)):
                 if not np.isnan(etime):
@@ -166,6 +163,9 @@ def main(data_dir='./data/data_structure'):
                             photostim_event_time=response_start - photstim_detail['pre_go_end_time'] - photstim_detail['duration'],
                             stim_spot_count=photstim_detail['spot'],
                             photostim_period=photstim_detail['period']))
+                        photostim_traces.append(dict(pkey, aom_input_trace=aom_input_trace[ts_trial == tr_id],
+                                                     laser_power=laser_power[ts_trial == tr_id],
+                                                     photostim_timestamps=ts_tvec[ts_trial == tr_id] - tr_start))
 
         # insert trial info
         experiment.SessionTrial.insert(session_trials, **insert_kwargs)
@@ -173,6 +173,8 @@ def main(data_dir='./data/data_structure'):
         experiment.PhotostimTrial.insert(photostim_trials, **insert_kwargs)
         experiment.TrialEvent.insert(trial_events, **insert_kwargs)
         experiment.PhotostimEvent.insert(photostim_events, **insert_kwargs)
+        experiment.PhotostimTrace.insert1(photostim_traces, **insert_kwargs)
+        tracking.LickTrace.insert1(lick_traces, **insert_kwargs)
 
         # ---- units ----
         insert_key = (ephys.ProbeInsertion & session_key).fetch1()

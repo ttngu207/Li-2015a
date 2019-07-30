@@ -87,17 +87,6 @@ class Photostim(dj.Manual):
 
 
 @schema
-class PhotostimTrace(dj.Imported):
-    definition = """
-    -> Session
-    ---
-    aom_input_trace: longblob  # voltage input to AOM
-    laser_power: longblob  # (mW) laser power delivered to tissue 
-    photostim_timestamps: longblob
-    """
-
-
-@schema
 class SessionTrial(dj.Imported):
     definition = """
     -> Session
@@ -296,4 +285,15 @@ class PhotostimEvent(dj.Imported):
     duration=null: float                # (s)
     stim_spot_count=null: int           # number of laser spot of photostimulation
     -> [nullable] PhotostimPeriod 
+    """
+
+
+@schema
+class PhotostimTrace(dj.Imported):
+    definition = """
+    -> SessionTrial
+    ---
+    aom_input_trace: longblob  # voltage input to AOM
+    laser_power: longblob  # (mW) laser power delivered to tissue 
+    photostim_timestamps: longblob
     """

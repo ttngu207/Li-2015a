@@ -134,10 +134,10 @@ def main(meta_data_dir='./data/meta_data'):
 
             virus.VirusInjection.insert([dict(virus_injection,
                                               injection_id=inj_idx + 1,
-                                              ml_location = coord[0] * 1000,
-                                              ap_location = coord[1] * 1000,
-                                              dv_location = coord[2] * 1000,
-                                              injection_volume = vol)
+                                              ml_location=coord[0] * 1000,
+                                              ap_location=coord[1] * 1000,
+                                              dv_location=coord[2] * 1000,
+                                              injection_volume=vol)
                                          for inj_idx, (coord, vol) in enumerate(zip(meta_data.virus.infectionCoordinates,
                                                                                     meta_data.virus.injectionVolume))],
                                         ignore_extra_fields=True, skip_duplicates=True)

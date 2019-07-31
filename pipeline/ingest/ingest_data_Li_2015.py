@@ -139,12 +139,12 @@ def main(data_dir='./data/data_structure'):
                         stim_power = laser_power[ts_trial == tr_id]
                         stim_power = np.where(stim_power == np.Inf, 0, stim_power)  # handle cases where stim power is Inf
                         photostim_events.append(dict(pkey, **photostim_key, photostim_event_id=len(photostim_events)+1,
+                                                     photostim_event_time=delay_start,  # this study has photostrim strictly in the delay period
                                                      duration=photostim_dur,
                                                      power=stim_power.max() if len(stim_power) > 0 else None))
                         photostim_traces.append(dict(pkey, aom_input_trace=aom_input_trace[ts_trial == tr_id],
                                                      laser_power=laser_power[ts_trial == tr_id],
                                                      photostim_timestamps=ts_tvec[ts_trial == tr_id] - tr_start))
-
 
         # insert trial info
         experiment.SessionTrial.insert(session_trials, **insert_kwargs)
@@ -152,8 +152,8 @@ def main(data_dir='./data/data_structure'):
         experiment.PhotostimTrial.insert(photostim_trials, **insert_kwargs)
         experiment.TrialEvent.insert(trial_events, **insert_kwargs)
         experiment.PhotostimEvent.insert(photostim_events, **insert_kwargs)
-        experiment.PhotostimTrace.insert1(photostim_traces, **insert_kwargs)
-        tracking.LickTrace.insert1(lick_traces, **insert_kwargs)
+        experiment.PhotostimTrace.insert(photostim_traces, **insert_kwargs)
+        tracking.LickTrace.insert(lick_traces, **insert_kwargs)
 
         # ---- units ----
         insert_key = (ephys.ProbeInsertion & session_key).fetch1()

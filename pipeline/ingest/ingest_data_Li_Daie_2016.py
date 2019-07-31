@@ -173,8 +173,8 @@ def main(data_dir='./data/data_structure'):
         experiment.PhotostimTrial.insert(photostim_trials, **insert_kwargs)
         experiment.TrialEvent.insert(trial_events, **insert_kwargs)
         experiment.PhotostimEvent.insert(photostim_events, **insert_kwargs)
-        experiment.PhotostimTrace.insert1(photostim_traces, **insert_kwargs)
-        tracking.LickTrace.insert1(lick_traces, **insert_kwargs)
+        experiment.PhotostimTrace.insert(photostim_traces, **insert_kwargs)
+        tracking.LickTrace.insert(lick_traces, **insert_kwargs)
 
         # ---- units ----
         insert_key = (ephys.ProbeInsertion & session_key).fetch1()

@@ -7,19 +7,20 @@ from dateutil.tz import tzlocal
 import pytz
 import re
 import numpy as np
+import json
 import pandas as pd
 
-from pipeline import (lab, experiment, ephys, psth, tracking)
+from pipeline import (lab, experiment, ephys, psth, tracking, virus)
 import pynwb
 from pynwb import NWBFile, NWBHDF5IO
 
 # ============================== SET CONSTANTS ==========================================
-nwb_output_dir = os.path.join('data', 'NWB 2.0')
-session_time = datetime.strptime('00:00:00', '%H:%M:%S').time()  # no precise time available
+default_nwb_output_dir = os.path.join('data', 'NWB 2.0')
+zero_zero_time = datetime.strptime('00:00:00', '%H:%M:%S').time()  # no precise time available
 hardware_filter = 'Bandpass filtered 300-6K Hz'
 
 
-def export_to_nwb(session_key):
+def export_to_nwb(session_key, nwb_output_dir=default_nwb_output_dir, save=False):
 
     this_session = (experiment.Session & session_key).fetch1()
 
@@ -29,11 +30,11 @@ def export_to_nwb(session_key):
 
     # -- NWB file - a NWB2.0 file for each session
     nwbfile = NWBFile(identifier='_'.join(
-        [str(this_session['subject_id']),
+        ['ANM' + str(this_session['subject_id']),
          this_session['session_date'].strftime('%Y-%m-%d'),
          str(this_session['session'])]),
         session_description='',
-        session_start_time=datetime.combine(this_session['session_date'], session_time),
+        session_start_time=datetime.combine(this_session['session_date'], zero_zero_time),
         file_create_date=datetime.now(tzlocal()),
         experimenter=this_session['username'],
         institution='Janelia Research Campus')
@@ -45,7 +46,10 @@ def export_to_nwb(session_key):
                              & subj).fetch('gene_modification')),
         sex=subj['sex'],
         species=subj['species'],
-        date_of_birth=subj['date_of_birth'])
+        date_of_birth=datetime.combine(subj['date_of_birth'], zero_zero_time) if subj['date_of_birth'] else None)
+    # -- virus
+    nwbfile.virus = json.dumps([{k: str(v) for k, v in virus_injection.items() if k not in subj}
+                                for virus_injection in virus.VirusInjection * virus.Virus & session_key])
 
     # ===============================================================================
     # ======================== EXTRACELLULAR & CLUSTERING ===========================
@@ -66,11 +70,10 @@ def export_to_nwb(session_key):
         for electrode_group in lab.ElectrodeConfig.ElectrodeGroup & electrode_config:
             electrode_groups[electrode_group['electrode_group']] = nwbfile.create_electrode_group(
                 name=electrode_config['electrode_config_name'] + '_g' + str(electrode_group['electrode_group']),
-                description = 'N/A',
-                device = nwbfile.create_device(name=electrode_config['probe']),
-                location = '; '.join([f'{k}: {str(v)}' for k, v in
-                                      (dj_insert_location & session_key).fetch1().items()
-                                      if k not in dj_insert_location.primary_key]))
+                description='N/A',
+                device=nwbfile.create_device(name=electrode_config['probe']),
+                location=json.dumps({k: str(v) for k, v in (dj_insert_location & session_key).fetch1().items()
+                                     if k not in dj_insert_location.primary_key}))
 
         for chn in (lab.ElectrodeConfig.Electrode * lab.Probe.Electrode & electrode_config).fetch(as_dict=True):
             nwbfile.add_electrode(id=chn['electrode'],
@@ -93,13 +96,13 @@ def export_to_nwb(session_key):
         for unit in (ephys.Unit * ephys.UnitCellType & probe_insertion).fetch(as_dict=True):
             # make an electrode table region (which electrode(s) is this unit coming from)
             nwbfile.add_unit(id=unit['unit'],
-                             electrodes=unit['electrode'],
+                             electrodes=[unit['electrode']],
                              electrode_group=electrode_groups[unit['electrode_group']],
-                             quality = unit['unit_quality'],
+                             quality=unit['unit_quality'],
                              posx=unit['unit_posx'],
                              posy=unit['unit_posy'],
-                             amp = unit['unit_amp'],
-                             snr = unit['unit_snr'],
+                             amp=unit['unit_amp'] if unit['unit_amp'] else np.nan,
+                             snr=unit['unit_snr'] if unit['unit_amp'] else np.nan,
                              cell_type=unit['cell_type'],
                              spike_times=unit['spike_times'],
                              waveform_mean=np.mean(unit['waveform'], axis=0),
@@ -108,24 +111,21 @@ def export_to_nwb(session_key):
     # ===============================================================================
     # ============================= BEHAVIOR TRACKING ===============================
     # ===============================================================================
-    tracking_data = ((tracking.LickTrace & session_key).fetch1()
-                     if tracking.LickTrace & session_key else None)
-    
-    if tracking_data:
-        behav_acq = pynwb.behavior.BehavioralTimeSeries(name = 'lick_trace')
+
+    if tracking.LickTrace * experiment.SessionTrial & session_key:
+        # re-concatenating trialized tracking traces
+        lick_traces, time_vecs, trial_starts = (tracking.LickTrace * experiment.SessionTrial & session_key).fetch(
+            'lick_trace', 'lick_trace_timestamps', 'start_time')
+        behav_acq = pynwb.behavior.BehavioralTimeSeries(name='BehavioralTimeSeries')
         nwbfile.add_acquisition(behav_acq)
-        [tracking_data.pop(k) for k in tracking.LickTrace.primary_key]
-        timestamps = tracking_data.pop('lick_trace_timestamps')
-        for b_k, b_v in tracking_data.items():
-            behav_acq.create_timeseries(name = b_k,
-                                        unit = 'a.u.',
-                                        conversion = 1.0,
-                                        data = b_v,
-                                        timestamps=timestamps)
+        behav_acq.create_timeseries(name='lick_trace', unit='a.u.', conversion=1.0,
+                                    data=np.hstack(lick_traces),
+                                    timestamps=np.hstack(time_vecs + trial_starts.astype(float)))
 
     # ===============================================================================
     # ============================= PHOTO-STIMULATION ===============================
     # ===============================================================================
+    stim_sites = {}
     for photostim in experiment.Photostim * experiment.BrainLocation * lab.PhotostimDevice & session_key:
 
         stim_device = (nwbfile.get_device(photostim['photostim_device'])
@@ -136,18 +136,42 @@ def export_to_nwb(session_key):
             name=photostim['brain_location_name'],
             device=stim_device,
             excitation_lambda=float(photostim['excitation_wavelength']),
-            location='; '.join([f'{k}: {str(v)}' for k, v in photostim.items()
-                                if k in dj_insert_location.heading.names and k not in dj_insert_location.primary_key]),
+            location=json.dumps({k: str(v) for k, v in photostim.items()
+                                if k in dj_insert_location.heading.names and k not in dj_insert_location.primary_key}),
             description='')
         nwbfile.add_ogen_site(stim_site)
+        stim_sites[photostim['photo_stim']] = stim_site
+
+    # re-concatenating trialized photostim traces
+    dj_photostim = (experiment.PhotostimTrace * experiment.SessionTrial * experiment.PhotostimEvent
+                    * experiment.Photostim * experiment.BrainLocation & session_key)
+
+    for photo_stim, stim_site in stim_sites.items():
+        if dj_photostim & {'photo_stim': photo_stim}:
+            aom_input_trace, laser_power, time_vecs, trial_starts, brain_location_name = (
+                    dj_photostim & {'photo_stim': photo_stim}).fetch(
+                'aom_input_trace', 'laser_power', 'photostim_timestamps', 'start_time', 'brain_location_name')
+
+            aom_series = pynwb.ogen.OptogeneticSeries(
+                name=stim_site.name + '_aom_input_trace',
+                site=stim_site, unit='mW', resolution=0.0, conversion=1e-6,
+                data = np.hstack(aom_input_trace),
+                timestamps = np.hstack(time_vecs + trial_starts.astype(float)))
+            laser_series = pynwb.ogen.OptogeneticSeries(
+                name=stim_site.name + '_laser_power',
+                site=stim_site, unit='mW', resolution=0.0, conversion=1e-6,
+                data = np.hstack(laser_power),
+                timestamps = np.hstack(time_vecs + trial_starts.astype(float)))
+
+            nwbfile.add_stimulus(aom_series)
+            nwbfile.add_stimulus(laser_series)
 
     # ===============================================================================
     # =============================== BEHAVIOR TRIALS ===============================
     # ===============================================================================
 
     # =============== TrialSet ====================
-    # NWB 'trial' (of type dynamic table) by default comes with three mandatory attributes:
-    #                                                                       'id', 'start_time' and 'stop_time'.
+    # NWB 'trial' (of type dynamic table) by default comes with three mandatory attributes: 'start_time' and 'stop_time'
     # Other trial-related information needs to be added in to the trial-table as additional columns (with column name
     # and column description)
 
@@ -174,19 +198,41 @@ def export_to_nwb(session_key):
             nwbfile.add_trial(**trial)
 
     # ===============================================================================
-    # =============================== TRIAL-SEGMENTED DATA ==========================
+    # =============================== BEHAVIOR TRIAL EVENTS ==========================
     # ===============================================================================
 
+    behav_event = pynwb.behavior.BehavioralEvents(name='BehavioralEvents')
+    nwbfile.add_acquisition(behav_event)
+
+    for trial_event_type in (experiment.TrialEventType & experiment.TrialEvent & session_key).fetch('trial_event_type'):
+        event_times, trial_starts = (experiment.TrialEvent * experiment.SessionTrial
+                                     & session_key & {'trial_event_type': trial_event_type}).fetch(
+            'trial_event_time', 'start_time')
+        event_times = np.hstack(event_times.astype(float) + trial_starts.astype(float))
+        behav_event.create_timeseries(name=trial_event_type, unit='a.u.', conversion=1.0,
+                                      data=np.full_like(event_times, 1),
+                                      timestamps=event_times)
+
+    photostim_event_time, trial_starts, photo_stim, power, duration = (
+            experiment.PhotostimEvent * experiment.SessionTrial & session_key).fetch(
+        'photostim_event_time', 'start_time', 'photo_stim', 'power', 'duration')
+
+    behav_event.create_timeseries(name='photostim_start_time', unit='a.u.', conversion=1.0,
+                                  data=power,
+                                  timestamps=photostim_event_time.astype(float) + trial_starts.astype(float),
+                                  control=photo_stim, control_description=stim_sites)
+    behav_event.create_timeseries(name='photostim_stop_time', unit='a.u.', conversion=1.0,
+                                  data=np.full_like(photostim_event_time, 0),
+                                  timestamps=photostim_event_time.astype(float) + duration + trial_starts.astype(float),
+                                  control=photo_stim, control_description=stim_sites)
+
     # =============== Write NWB 2.0 file ===============
-    save_file_name = ''.join([nwbfile.identifier, '.nwb'])
-    if not os.path.exists(nwb_output_dir):
-        os.makedirs(nwb_output_dir)
-    with NWBHDF5IO(os.path.join(nwb_output_dir, save_file_name), mode = 'w') as io:
-        io.write(nwbfile)
-        print(f'Write NWB 2.0 file: {save_file_name}')
+    if save:
+        save_file_name = ''.join([nwbfile.identifier, '.nwb'])
+        if not os.path.exists(nwb_output_dir):
+            os.makedirs(nwb_output_dir)
+        with NWBHDF5IO(os.path.join(nwb_output_dir, save_file_name), mode = 'w') as io:
+            io.write(nwbfile)
+            print(f'Write NWB 2.0 file: {save_file_name}')
 
-
-
-
-
-
+    return nwbfile

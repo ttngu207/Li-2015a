@@ -18,9 +18,10 @@ from pynwb import NWBFile, NWBHDF5IO
 default_nwb_output_dir = os.path.join('data', 'NWB 2.0')
 zero_zero_time = datetime.strptime('00:00:00', '%H:%M:%S').time()  # no precise time available
 hardware_filter = 'Bandpass filtered 300-6K Hz'
+institution = 'Janelia Research Campus'
 
 
-def export_to_nwb(session_key, nwb_output_dir=default_nwb_output_dir, save=False):
+def export_to_nwb(session_key, nwb_output_dir=default_nwb_output_dir, save=False, overwrite=True):
 
     this_session = (experiment.Session & session_key).fetch1()
 
@@ -37,7 +38,7 @@ def export_to_nwb(session_key, nwb_output_dir=default_nwb_output_dir, save=False
         session_start_time=datetime.combine(this_session['session_date'], zero_zero_time),
         file_create_date=datetime.now(tzlocal()),
         experimenter=this_session['username'],
-        institution='Janelia Research Campus')
+        institution=institution)
     # -- subject
     subj = (lab.Subject & session_key).fetch1()
     nwbfile.subject = pynwb.file.Subject(
@@ -231,8 +232,22 @@ def export_to_nwb(session_key, nwb_output_dir=default_nwb_output_dir, save=False
         save_file_name = ''.join([nwbfile.identifier, '.nwb'])
         if not os.path.exists(nwb_output_dir):
             os.makedirs(nwb_output_dir)
+        if not overwrite and os.path.exists(os.path.join(nwb_output_dir, save_file_name)):
+            return nwbfile
         with NWBHDF5IO(os.path.join(nwb_output_dir, save_file_name), mode = 'w') as io:
             io.write(nwbfile)
             print(f'Write NWB 2.0 file: {save_file_name}')
 
     return nwbfile
+
+
+# ============================== EXPORT ALL ==========================================
+
+if __name__ == '__main__':
+    if len(sys.argv) > 1:
+        nwb_outdir = sys.argv[1]
+    else:
+        nwb_outdir = default_nwb_output_dir
+
+    for skey in experiment.Session.fetch('KEY'):
+        export_to_nwb(skey, nwb_output_dir=nwb_outdir, save=True)

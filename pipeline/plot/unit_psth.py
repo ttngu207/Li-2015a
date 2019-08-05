@@ -59,7 +59,7 @@ def _plot_psth(ipsi, contra, vlines=[], shade_bar=None, ax=None, title=''):
     ax.set_title(title)
 
 
-def plot_unit_psth(unit_key, condition_name_kw=['good_noearlylick_', '_hit'], axs=None):
+def plot_unit_psth(unit_key, condition_name_kw=['good_noearlylick_', '_hit'], axs=None, title=''):
     """
     Default raster and PSTH plot for a specified unit - only {good, no early lick, correct trials} selected
     """
@@ -93,7 +93,7 @@ def plot_unit_psth(unit_key, condition_name_kw=['good_noearlylick_', '_hit'], ax
         fig, axs = plt.subplots(2, 1)
 
     _plot_spike_raster(ipsi_hit_unit_psth, contra_hit_unit_psth, ax=axs[0],
-                       vlines=period_starts, shade_bar=stim_bar, title=f'Unit #: {unit_key["unit"]}')
+                       vlines=period_starts, shade_bar=stim_bar, title=title if title else f'Unit #: {unit_key["unit"]}')
     _plot_psth(ipsi_hit_unit_psth, contra_hit_unit_psth,
                vlines=period_starts, shade_bar=stim_bar, ax=axs[1])
 

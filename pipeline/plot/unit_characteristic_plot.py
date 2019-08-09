@@ -192,7 +192,7 @@ def plot_unit_bilateral_photostim_effect(probe_insertion, axs=None):
     axs.set_xlim((-10, 60))
 
 
-def plot_stacked_contra_ipsi_psth(units, axs=None):
+def plot_stacked_contra_ipsi_psth(units, axs=None, sort_method='center_of_mass'):
     units = units.proj()
 
     if axs is None:
@@ -221,18 +221,15 @@ def plot_stacked_contra_ipsi_psth(units, axs=None):
 
     # ipsi selective ipsi trials
     psth_is_it = (psth.UnitPsth * sel_i.proj('unit_posy') & conds_i).fetch(order_by='unit_posy desc')
-
     # ipsi selective contra trials
     psth_is_ct = (psth.UnitPsth * sel_i.proj('unit_posy') & conds_c).fetch(order_by='unit_posy desc')
-
     # contra selective contra trials
     psth_cs_ct = (psth.UnitPsth * sel_c.proj('unit_posy') & conds_c).fetch(order_by='unit_posy desc')
-
     # contra selective ipsi trials
     psth_cs_it = (psth.UnitPsth * sel_c.proj('unit_posy') & conds_i).fetch(order_by='unit_posy desc')
 
     _plot_stacked_psth_diff(psth_cs_ct, psth_cs_it, ax=axs[0],
-                            vlines=period_starts, flip=True)
+                            vlines=period_starts, flip=True, sort_method=sort_method)
 
     axs[0].set_title('Contra-selective Units')
     axs[0].set_ylabel('Unit (by depth)')
@@ -240,7 +237,7 @@ def plot_stacked_contra_ipsi_psth(units, axs=None):
     axs[0].set_xlim([_plt_xmin, _plt_xmax])
 
     _plot_stacked_psth_diff(psth_is_it, psth_is_ct, ax=axs[1],
-                            vlines=period_starts)
+                            vlines=period_starts, sort_method=sort_method)
 
     axs[1].set_title('Ipsi-selective Units')
     axs[1].set_ylabel('Unit (by depth)')

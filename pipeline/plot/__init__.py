@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import itertools
 import pandas as pd
+from scipy import ndimage
 
 from pipeline import experiment, ephys, psth
 from pipeline import smooth_psth
@@ -36,7 +37,7 @@ def _plot_avg_psth(ipsi_psth, contra_psth, vlines={}, ax=None, title=''):
     ax.spines['top'].set_visible(False)
 
 
-def _plot_stacked_psth_diff(psth_a, psth_b, vlines=[], ax=None, flip=False):
+def _plot_stacked_psth_diff(psth_a, psth_b, vlines=[], ax=None, flip=False, sort_method=None):
     """
     Heatmap of (psth_a - psth_b)
     psth_a, psth_b are the unit_psth(s) resulted from psth.UnitPSTH.fetch()
@@ -59,6 +60,10 @@ def _plot_stacked_psth_diff(psth_a, psth_b, vlines=[], ax=None, flip=False):
 
     # moving average
     result = np.array([_movmean(i) for i in result])
+
+    # sorting
+    if sort_method == 'center_of_mass':
+        result = sorted(result, key=lambda a: ndimage.center_of_mass(a))
 
     if ax is None:
         fig, ax = plt.subplots(1, 1)

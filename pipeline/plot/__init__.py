@@ -37,7 +37,7 @@ def _plot_avg_psth(ipsi_psth, contra_psth, vlines={}, ax=None, title=''):
     ax.spines['top'].set_visible(False)
 
 
-def _plot_stacked_psth_diff(psth_a, psth_b, vlines=[], ax=None, flip=False, sort_method=None):
+def _plot_stacked_psth_diff(psth_a, psth_b, vlines=[], ax=None, flip=False, plot=True):
     """
     Heatmap of (psth_a - psth_b)
     psth_a, psth_b are the unit_psth(s) resulted from psth.UnitPSTH.fetch()
@@ -61,20 +61,19 @@ def _plot_stacked_psth_diff(psth_a, psth_b, vlines=[], ax=None, flip=False, sort
     # moving average
     result = np.array([_movmean(i) for i in result])
 
-    # sorting
-    if sort_method == 'center_of_mass':
-        result = sorted(result, key=lambda a: ndimage.center_of_mass(a))
+    if plot:
+        if ax is None:
+            fig, ax = plt.subplots(1, 1)
 
-    if ax is None:
-        fig, ax = plt.subplots(1, 1)
+        # ax.set_axis_off()
+        ax.set_xlim([plt_xmin, plt_xmax])
+        for x in vlines:
+            ax.axvline(x=x, linestyle='--', color='k')
 
-    # ax.set_axis_off()
-    ax.set_xlim([plt_xmin, plt_xmax])
-    for x in vlines:
-        ax.axvline(x=x, linestyle='--', color='k')
+        im = ax.imshow(result, cmap=plt.cm.bwr, aspect=aspect, extent=extent)
+        im.set_clim((-1, 1))
 
-    im = ax.imshow(result, cmap=plt.cm.bwr, aspect=aspect, extent=extent)
-    im.set_clim((-1, 1))
+    return result
 
 
 def _plot_with_sem(data, t_vec, ax, c='k'):

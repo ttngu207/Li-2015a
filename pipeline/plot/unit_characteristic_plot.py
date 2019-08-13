@@ -192,7 +192,7 @@ def plot_unit_bilateral_photostim_effect(probe_insertion, axs=None):
     axs.set_xlim((-10, 60))
 
 
-def plot_stacked_contra_ipsi_psth(units, axs=None, sort_method='center_of_mass'):
+def plot_stacked_contra_ipsi_psth(units, axs=None):
     units = units.proj()
 
     if axs is None:
@@ -229,20 +229,104 @@ def plot_stacked_contra_ipsi_psth(units, axs=None, sort_method='center_of_mass')
     psth_cs_it = (psth.UnitPsth * sel_c.proj('unit_posy') & conds_i).fetch(order_by='unit_posy desc')
 
     _plot_stacked_psth_diff(psth_cs_ct, psth_cs_it, ax=axs[0],
-                            vlines=period_starts, flip=True, sort_method=sort_method)
+                            vlines=period_starts, flip=True)
 
     axs[0].set_title('Contra-selective Units')
-    axs[0].set_ylabel('Unit (by depth)')
+    axs[0].set_ylabel('Unit')
     axs[0].set_xlabel('Time to go-cue (s)')
     axs[0].set_xlim([_plt_xmin, _plt_xmax])
 
     _plot_stacked_psth_diff(psth_is_it, psth_is_ct, ax=axs[1],
-                            vlines=period_starts, sort_method=sort_method)
+                            vlines=period_starts)
 
     axs[1].set_title('Ipsi-selective Units')
-    axs[1].set_ylabel('Unit (by depth)')
+    axs[1].set_ylabel('Unit')
     axs[1].set_xlabel('Time to go-cue (s)')
     axs[1].set_xlim([_plt_xmin, _plt_xmax])
+
+
+def plot_selectivity_sorted_stacked_contra_ipsi_psth(units, axs=None):
+    units = units.proj()
+
+    if axs is None:
+        fig, axs = plt.subplots(1, 2, figsize=(20, 20))
+    assert axs.size == 2
+
+    period_starts = (experiment.Period
+                     & 'period in ("sample", "delay", "response")').fetch(
+                         'period_start')
+
+    hemi = _get_units_hemisphere(units)
+
+    conds_i = (psth.TrialCondition
+               & {'trial_condition_name':
+                  'good_noearlylick_left_hit' if hemi == 'left' else 'good_noearlylick_right_hit'}).fetch1('KEY')
+
+    conds_c = (psth.TrialCondition
+               & {'trial_condition_name':
+                  'good_noearlylick_right_hit' if hemi == 'left' else 'good_noearlylick_left_hit'}).fetch1('KEY')
+
+    # separate units to: i) sample/delay not response; ii) sample/delay or response; iii) not sample/delay and response
+    sample_delay_units = units & (psth.PeriodSelectivity
+                                  & 'period in ("sample", "delay")'
+                                  & 'period_selectivity != "non-selective"')
+    sample_delay_units = sample_delay_units & (psth.PeriodSelectivity
+                                               & 'period = "response"'
+                                               & 'period_selectivity = "non-selective"')
+    sample_delay_response_units = units & (psth.PeriodSelectivity
+                                           & 'period in ("sample", "delay")'
+                                           & 'period_selectivity != "non-selective"')
+    sample_delay_response_units = sample_delay_response_units & (psth.PeriodSelectivity
+                                                                 & 'period = "response"'
+                                                                 & 'period_selectivity != "non-selective"')
+    response_units = units & (psth.PeriodSelectivity
+                              & 'period in ("sample", "delay")'
+                              & 'period_selectivity = "non-selective"')
+    response_units = response_units & (psth.PeriodSelectivity
+                                       & 'period = "response"'
+                                       & 'period_selectivity != "non-selective"')
+
+    ipsi_selective_psth, contra_selective_psth = [], []
+    for units in (sample_delay_units, sample_delay_response_units, response_units):
+        sel_i = (ephys.Unit * psth.UnitSelectivity
+                 & 'unit_selectivity = "ipsi-selective"' & units)
+        sel_c = (ephys.Unit * psth.UnitSelectivity
+                 & 'unit_selectivity = "contra-selective"' & units)
+
+        # ipsi selective ipsi trials
+        psth_is_it = (psth.UnitPsth * sel_i.proj('unit_posy') & conds_i).fetch(order_by='unit_posy desc')
+        # ipsi selective contra trials
+        psth_is_ct = (psth.UnitPsth * sel_i.proj('unit_posy') & conds_c).fetch(order_by='unit_posy desc')
+        # contra selective contra trials
+        psth_cs_ct = (psth.UnitPsth * sel_c.proj('unit_posy') & conds_c).fetch(order_by='unit_posy desc')
+        # contra selective ipsi trials
+        psth_cs_it = (psth.UnitPsth * sel_c.proj('unit_posy') & conds_i).fetch(order_by='unit_posy desc')
+
+        contra_selective_psth.append(_plot_stacked_psth_diff(psth_cs_ct, psth_cs_it, ax=axs[0], flip=True, plot=False))
+        ipsi_selective_psth.append(_plot_stacked_psth_diff(psth_is_it, psth_is_ct, ax=axs[1], plot=False))
+
+    contra_selective_psth = np.vstack(contra_selective_psth)
+    ipsi_selective_psth = np.vstack(ipsi_selective_psth)
+
+    xlim = -3, 2
+    im = axs[0].imshow(contra_selective_psth, cmap=plt.cm.bwr,
+                       aspect=4.5/contra_selective_psth.shape[0],
+                       extent=[-3, 3, 0, contra_selective_psth.shape[0]])
+    im.set_clim((-1, 1))
+
+    im = axs[1].imshow(ipsi_selective_psth, cmap=plt.cm.bwr,
+                       aspect=4.5/ipsi_selective_psth.shape[0],
+                       extent=[-3, 3, 0, ipsi_selective_psth.shape[0]])
+    im.set_clim((-1, 1))
+
+    # cosmetic
+    for ax, title in zip(axs, ('Contra-selective Units', 'Ipsi-selective Units')):
+        for x in period_starts:
+            ax.axvline(x=x, linestyle='--', color='k')
+        ax.set_title(title)
+        ax.set_ylabel('Unit')
+        ax.set_xlabel('Time to go-cue (s)')
+        ax.set_xlim(xlim)
 
 
 def plot_avg_contra_ipsi_psth(units, axs=None):

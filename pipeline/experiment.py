@@ -164,9 +164,9 @@ class Period(dj.Lookup):
     period_end: float    # (s) end of this period relative to GO CUE
     """
 
-    contents = [('sample', -2.4, -1.2),
-                ('delay', -1.2, 0.0),
-                ('response', 0.0, 1.2)]
+    contents = [('sample', -2.6, -1.3),
+                ('delay', -1.3, 0.0),
+                ('response', 0.0, 1.3)]
 
 
 # ---- behavioral trials ----

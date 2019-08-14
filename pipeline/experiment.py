@@ -155,20 +155,6 @@ class SessionComment(dj.Manual):
     """
 
 
-@schema
-class Period(dj.Lookup):
-    definition = """
-    period: varchar(12)
-    ---
-    period_start: float  # (s) start of this period relative to GO CUE
-    period_end: float    # (s) end of this period relative to GO CUE
-    """
-
-    contents = [('sample', -2.6, -1.3),
-                ('delay', -1.3, 0.0),
-                ('response', 0.0, 1.3)]
-
-
 # ---- behavioral trials ----
 
 @schema
@@ -297,3 +283,22 @@ class PhotostimTrace(dj.Imported):
     laser_power: longblob  # (mW) laser power delivered to tissue 
     photostim_timestamps: longblob
     """
+
+# ----
+
+
+@schema
+class EventPeriod(dj.Lookup):
+    definition = """  # time period between any two TrialEvent (eg the delay period is between delay and go)
+    period: varchar(12)
+    ---
+    -> TrialEventType.proj(start_event_type='trial_event_type')
+    start_time_shift: float  # (s) any time-shift amount with respect to the start_event_type
+    -> TrialEventType.proj(end_event_type='trial_event_type')
+    end_time_shift: float    # (s) any time-shift amount with respect to the end_event_type
+    """
+
+    contents = [('sample', 'sample', 0, 'delay', 0),
+                ('delay', 'delay', 0, 'go', 0),
+                ('response', 'go', 0, 'go', 1.3)]
+

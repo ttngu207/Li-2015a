@@ -36,17 +36,17 @@ def main(data_dir='./data/data_structure'):
                         3: {'brain_area': 'alm', 'hemi': 'left', 'duration': 0.5, 'spot': 1,
                             'pre_go_end_time': 0.3, 'period': 'middle_delay'},
                         4: {'brain_area': 'alm', 'hemi': 'left', 'duration': 0.8, 'spot': 1,
-                            'pre_go_end_time': 0.8, 'period': 'early_delay'},
+                            'pre_go_end_time': 0.9, 'period': 'early_delay'},
                         5: {'brain_area': 'alm', 'hemi': 'right', 'duration': 0.8, 'spot': 1,
-                            'pre_go_end_time': 0.8, 'period': 'early_delay'},
+                            'pre_go_end_time': 0.9, 'period': 'early_delay'},
                         6: {'brain_area': 'alm', 'hemi': 'both', 'duration': 0.8, 'spot': 4,
-                            'pre_go_end_time': 0.8, 'period': 'early_delay'},
+                            'pre_go_end_time': 0.9, 'period': 'early_delay'},
                         7: {'brain_area': 'alm', 'hemi': 'both', 'duration': 0.8, 'spot': 1,
-                            'pre_go_end_time': 0.8, 'period': 'early_delay'},
+                            'pre_go_end_time': 0.9, 'period': 'early_delay'},
                         8: {'brain_area': 'alm', 'hemi': 'left', 'duration': 0.8, 'spot': 4,
-                            'pre_go_end_time': 0.8, 'period': 'early_delay'},
+                            'pre_go_end_time': 0.9, 'period': 'early_delay'},
                         9: {'brain_area': 'alm', 'hemi': 'right', 'duration': 0.8, 'spot': 4,
-                            'pre_go_end_time': 0.8, 'period': 'early_delay'}}
+                            'pre_go_end_time': 0.9, 'period': 'early_delay'}}
 
     cell_type_mapper = {'pyramidal': 'Pyr', 'FS': 'FS', 'IT': 'IT', 'PT': 'PT'}
 

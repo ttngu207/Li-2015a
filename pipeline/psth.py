@@ -317,7 +317,7 @@ class PeriodSelectivity(dj.Computed):
 
     definition = """
     -> ephys.Unit
-    -> experiment.Period
+    -> experiment.EventPeriod
     ---
     -> Selectivity.proj(period_selectivity='selectivity')
     p_value=null:                    float  # all trial spike rate t-test p-value
@@ -327,7 +327,7 @@ class PeriodSelectivity(dj.Computed):
 
     alpha = 0.05  # default alpha value
 
-    key_source = experiment.Period * (ephys.Unit & 'unit_quality != "all"')
+    key_source = experiment.EventPeriod * (ephys.Unit & 'unit_quality != "all"')
 
     def make(self, key):
         '''
@@ -347,7 +347,7 @@ class PeriodSelectivity(dj.Computed):
 
         # retrieving the spikes of interest,
         spikes_q = ((ephys.TrialSpikes & key)
-                    & (experiment.BehaviorTrial()
+                    * (experiment.BehaviorTrial()
                        & {'task': 'audio delay'}
                        & {'early_lick': 'no early'}
                        & {'outcome': 'hit'}) - experiment.PhotostimEvent)
@@ -356,46 +356,30 @@ class PeriodSelectivity(dj.Computed):
             self.insert1({**key, 'period_selectivity': 'non-selective'})
             return
 
-        # and their corresponding behavior,
-        lr = ['left', 'right']
-        behav = (experiment.BehaviorTrial & spikes_q.proj()).fetch(
-            order_by='trial asc')
-        behav_lr = {k: np.where(behav['trial_instruction'] == k)[0] for k in lr}
+        # retrieving event times
+        start_event, start_tshift, end_event, end_tshift = (experiment.EventPeriod & key).fetch1(
+            'start_event_type', 'start_time_shift', 'end_event_type', 'end_time_shift')
+        start_event_q = {k['trial']: float(k['start_event_time'])
+                         for k in (experiment.TrialEvent & key & {'trial_event_type': start_event}).proj(
+            start_event_time=f'trial_event_time - {start_tshift}').fetch(as_dict=True)}
+        end_event_q = {k['trial']: float(k['end_event_time'])
+                       for k in (experiment.TrialEvent & key & {'trial_event_type': end_event}).proj(
+            end_event_time=f'trial_event_time - {end_tshift}').fetch(as_dict=True)}
+        cue_event_q = {k['trial']: float(k['trial_event_time'])
+                       for k in (experiment.TrialEvent & key & {'trial_event_type': 'go'}).fetch(as_dict=True)}
 
-        if egpos['hemisphere'] == 'left':
-            behav_i = behav_lr['left']
-            behav_c = behav_lr['right']
-        else:
-            behav_i = behav_lr['right']
-            behav_c = behav_lr['left']
-
-        # constructing a square, nan-padded trial x spike array
-        spikes = spikes_q.fetch(order_by='trial asc')
-        ydim = max(len(i['spike_times']) for i in spikes)
-        square = np.array(
-            np.array([np.concatenate([st, pad])[:ydim]
-                      for st, pad in zip(spikes['spike_times'],
-                                         repeat([math.nan]*ydim))]))
-
-        # with which to calculate the selectivity over the given period
-        period = (experiment.Period & key).fetch1()
-
-        # by determining the period boundaries,
-        bounds = (period['period_start'], period['period_end'])
-
-        # masking the appropriate spikes,
-        lower_mask = np.ma.masked_greater_equal(square, bounds[0])
-        upper_mask = np.ma.masked_less_equal(square, bounds[1])
-        inrng_mask = np.logical_and(lower_mask.mask, upper_mask.mask)
-
-        # computing their spike rate,
-        rsum = np.sum(inrng_mask, axis=1)
-        dur = bounds[1] - bounds[0]
-        freq = rsum / dur
+        # compute spike rate during the period-of-interest for each trial
+        freq_i, freq_c = [], []
+        for trial, trial_instruct, spike_times in zip(*spikes_q.fetch('trial', 'trial_instruction', 'spike_times')):
+            start_time = start_event_q[trial] - cue_event_q[trial]
+            stop_time = end_event_q[trial] - cue_event_q[trial]
+            spk_rate = np.logical_and(spike_times >= start_time, spike_times < stop_time).sum() / (stop_time - start_time)
+            if egpos['hemisphere'] == trial_instruct:
+                freq_c.append(spk_rate)
+            else:
+                freq_i.append(spk_rate)
 
         # and testing for selectivity.
-        freq_i = freq[behav_i]
-        freq_c = freq[behav_c]
         t_stat, pval = sc_stats.ttest_ind(freq_i, freq_c, equal_var=True)
 
         freq_i_m = np.average(freq_i)

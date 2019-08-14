@@ -9,11 +9,10 @@ from pipeline import ephys, experiment
 from pipeline.plot import _get_photostim_time_and_duration
 
 
-_plt_xmin = -3
-_plt_xmax = 2
+_plt_xlim = [-3, 2]
 
 
-def _plot_spike_raster(ipsi, contra, vlines=[], shade_bar=None, ax=None, title=''):
+def _plot_spike_raster(ipsi, contra, vlines=[], shade_bar=None, ax=None, title='', xlim=_plt_xlim):
     if not ax:
        fig, ax = plt.subplots(1, 1)
 
@@ -34,11 +33,11 @@ def _plot_spike_raster(ipsi, contra, vlines=[], shade_bar=None, ax=None, title='
         ax.axvspan(shade_bar[0], shade_bar[0] + shade_bar[1], alpha = 0.3, color = 'royalblue')
 
     ax.set_axis_off()
-    ax.set_xlim([_plt_xmin, _plt_xmax])
+    ax.set_xlim(xlim)
     ax.set_title(title)
 
 
-def _plot_psth(ipsi, contra, vlines=[], shade_bar=None, ax=None, title=''):
+def _plot_psth(ipsi, contra, vlines=[], shade_bar=None, ax=None, title='', xlim=_plt_xlim):
     if not ax:
        fig, ax = plt.subplots(1, 1)
 
@@ -54,14 +53,15 @@ def _plot_psth(ipsi, contra, vlines=[], shade_bar=None, ax=None, title=''):
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
 
-    ax.set_xlim([_plt_xmin, _plt_xmax])
+    ax.set_xlim(xlim)
     ax.set_xlabel('Time (s)')
     ax.set_title(title)
 
 
-def plot_unit_psth(unit_key, condition_name_kw=['good_noearlylick_', '_hit'], axs=None, title=''):
+def plot_unit_psth(unit_key, condition_name_kw=['good_noearlylick_', '_hit'], axs=None, title='', xlim=_plt_xlim):
     """
     Default raster and PSTH plot for a specified unit - only {good, no early lick, correct trials} selected
+    condition_name_kw: list of keywords to match for the TrialCondition name
     """
 
     hemi = (ephys.ProbeInsertion.InsertionLocation
@@ -78,9 +78,14 @@ def plot_unit_psth(unit_key, condition_name_kw=['good_noearlylick_', '_hit'], ax
     contra_hit_unit_psth = UnitPsth.get_plotting_data(
         unit_key, {'trial_condition_name': contra_cond_name})
 
-    period_starts = (experiment.Period
-                     & 'period in ("sample", "delay", "response")').fetch(
-                         'period_start')
+    # get event start times: sample, delay, response
+    trial_cond_name = TrialCondition.get_cond_name_from_keywords(condition_name_kw)[0]
+    event_types, event_times = (TrialCondition().get_trials(trial_cond_name)
+                                * (experiment.TrialEvent & 'trial_event_type in ("sample", "delay", "go")')
+                                & unit_key).fetch('trial_event_type', 'trial_event_time')
+    period_starts = [np.nanmedian(np.array(event_times[event_types == event_type]).astype(float))
+                     for event_type in ('sample', 'delay', 'go')]
+    period_starts = period_starts - period_starts[-1]  # align to go-cue
 
     # photostim shaded bar (if applicable)
     try:
@@ -93,7 +98,8 @@ def plot_unit_psth(unit_key, condition_name_kw=['good_noearlylick_', '_hit'], ax
         fig, axs = plt.subplots(2, 1)
 
     _plot_spike_raster(ipsi_hit_unit_psth, contra_hit_unit_psth, ax=axs[0],
-                       vlines=period_starts, shade_bar=stim_bar, title=title if title else f'Unit #: {unit_key["unit"]}')
+                       vlines=period_starts, shade_bar=stim_bar,
+                       title=title if title else f'Unit #: {unit_key["unit"]}', xlim=xlim)
     _plot_psth(ipsi_hit_unit_psth, contra_hit_unit_psth,
-               vlines=period_starts, shade_bar=stim_bar, ax=axs[1])
+               vlines=period_starts, shade_bar=stim_bar, ax=axs[1], xlim=xlim)
 

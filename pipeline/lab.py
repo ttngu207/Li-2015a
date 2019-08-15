@@ -152,16 +152,6 @@ class Hemisphere(dj.Lookup):
 
 
 @schema
-class SurgeryLocation(dj.Manual):
-    definition = """
-    -> Surgery.Procedure
-    ---
-    -> Hemisphere
-    -> BrainArea 
-    """
-
-
-@schema
 class ProbeType(dj.Lookup):
     definition = """
     probe_type: varchar(32)    

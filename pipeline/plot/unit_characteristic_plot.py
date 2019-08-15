@@ -461,6 +461,58 @@ def plot_psth_photostim_effect(units, condition_name_kw=['both_alm'], axs=None):
     axs[1].axvspan(stim_time, stim_time + stim_dur, alpha=0.3, color='royalblue')
 
 
+def plot_selectivity_change_photostim_effect(units, condition_name_kw, ax=None):
+    trial_cond_name = psth.TrialCondition.get_cond_name_from_keywords(['good_noearlylick_', '_hit'])[0]
+    period_starts = _get_trial_event_times(['sample', 'delay', 'go'], units, trial_cond_name)
+
+    ctrl_left_cond_name = 'all_noearlylick_nostim_left'
+    ctrl_right_cond_name = 'all_noearlylick_nostim_right'
+    stim_left_cond_name = psth.TrialCondition().get_cond_name_from_keywords(set(list(condition_name_kw)
+                                                                                + ['noearlylick', 'stim', 'left']))[0]
+    stim_right_cond_name = psth.TrialCondition().get_cond_name_from_keywords(set(list(condition_name_kw)
+                                                                                 + ['noearlylick', 'stim', 'right']))[0]
+
+    delta_sels, ctrl_psths = [], []
+    for unit in (units * psth.UnitSelectivity & 'unit_selectivity != "non-selective"').proj('unit_selectivity').fetch(as_dict=True):
+        hemi = _get_units_hemisphere(unit)
+
+        ctrl_left_psth, t_vec = psth.UnitPsth.get_plotting_data(unit, ctrl_left_cond_name)['psth']
+        ctrl_right_psth, _ = psth.UnitPsth.get_plotting_data(unit, ctrl_right_cond_name)['psth']
+        stim_left_psth, _ = psth.UnitPsth.get_plotting_data(unit, stim_left_cond_name)['psth']
+        stim_right_psth, _ = psth.UnitPsth.get_plotting_data(unit, stim_right_cond_name)['psth']
+
+        if unit['unit_selectivity'] == 'ipsi-selective':
+            ctrl_psth_diff = ctrl_left_psth - ctrl_right_psth if hemi == 'left' else ctrl_right_psth - ctrl_left_psth
+            stim_psth_diff = stim_left_psth - stim_right_psth if hemi == 'left' else stim_right_psth - stim_left_psth
+        elif unit['unit_selectivity'] == 'contra-selective':
+            ctrl_psth_diff = ctrl_left_psth - ctrl_right_psth if hemi == 'right' else ctrl_right_psth - ctrl_left_psth
+            stim_psth_diff = stim_left_psth - stim_right_psth if hemi == 'right' else stim_right_psth - stim_left_psth
+
+        ctrl_psths.append(ctrl_psth_diff)
+        delta_sels.append(ctrl_psth_diff - stim_psth_diff)
+
+    ctrl_psths = np.vstack(ctrl_psths)
+    delta_sels = np.vstack(delta_sels)
+
+    recovery_times = []
+    for i in range(1000):
+        i_sample = np.random.choice(len(units), len(units), replace=True)
+        btstrp_diff = delta_sels[i_sample, :] / ctrl_psths[i_sample, :]
+        t_recovered = t_vec[np.logical_and(btstrp_diff < 0.2, t_vec > -1.6, t_vec < 1)]
+        if len(t_recovered) > 0:
+            recovery_times.append(t_recovered[0])
+
+    if ax is None:
+        fig, ax = plt.subplots(1, 1, figsize=(4, 6))
+
+    _plot_with_sem(delta_sels, t_vec, ax)
+    ax.axvline(x=np.mean(recovery_times), linestyle='--', color='g')
+    ax.axvspan(np.mean(recovery_times) - np.std(recovery_times), np.mean(recovery_times) + np.std(recovery_times),
+               alpha=0.3, color='g')
+    for x in period_starts:
+        ax.axvline(x=x, linestyle = '--', color = 'k')
+
+
 def plot_coding_direction(units, time_period=None, axs=None):
     _, proj_contra_trial, proj_ipsi_trial, time_stamps = psth.compute_CD_projected_psth(
         units.fetch('KEY'), time_period=time_period)

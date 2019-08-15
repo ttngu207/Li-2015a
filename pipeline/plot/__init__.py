@@ -78,7 +78,7 @@ def _plot_stacked_psth_diff(psth_a, psth_b, vlines=[], ax=None, flip=False, plot
 
 def _plot_with_sem(data, t_vec, ax, c='k'):
     v_mean = np.nanmean(data, axis=0)
-    v_sem = np.nanstd(data, axis=0)  # / np.sqrt(data.shape[0])
+    v_sem = np.nanstd(data, axis=0) / np.sqrt(data.shape[0])
     ax.plot(t_vec, v_mean, c)
     ax.fill_between(t_vec, v_mean - v_sem, v_mean + v_sem, alpha=0.25, facecolor=c)
     ax.spines['right'].set_visible(False)

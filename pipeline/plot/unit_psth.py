@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 from pipeline.psth import TrialCondition
 from pipeline.psth import UnitPsth
 from pipeline import ephys, experiment
-from pipeline.plot import _get_photostim_time_and_duration
+from pipeline.plot import _get_photostim_time_and_duration, _get_trial_event_times
 
 
 _plt_xlim = [-3, 2]
@@ -47,7 +47,7 @@ def _plot_psth(ipsi, contra, vlines=[], shade_bar=None, ax=None, title='', xlim=
     for x in vlines:
         ax.axvline(x=x, linestyle='--', color='k')
     if shade_bar is not None:
-        ax.axvspan(shade_bar[0], shade_bar[0] + shade_bar[1], alpha = 0.3, color = 'royalblue')
+        ax.axvspan(shade_bar[0], shade_bar[0] + shade_bar[1], alpha=0.3, color='royalblue')
 
     ax.set_ylabel('spikes/s')
     ax.spines["top"].set_visible(False)
@@ -80,12 +80,7 @@ def plot_unit_psth(unit_key, condition_name_kw=['good_noearlylick_', '_hit'], ax
 
     # get event start times: sample, delay, response
     trial_cond_name = TrialCondition.get_cond_name_from_keywords(condition_name_kw)[0]
-    event_types, event_times = (TrialCondition().get_trials(trial_cond_name)
-                                * (experiment.TrialEvent & 'trial_event_type in ("sample", "delay", "go")')
-                                & unit_key).fetch('trial_event_type', 'trial_event_time')
-    period_starts = [np.nanmedian(np.array(event_times[event_types == event_type]).astype(float))
-                     for event_type in ('sample', 'delay', 'go')]
-    period_starts = period_starts - period_starts[-1]  # align to go-cue
+    period_starts = _get_trial_event_times(['sample', 'delay', 'go'], unit_key, trial_cond_name)
 
     # photostim shaded bar (if applicable)
     try:

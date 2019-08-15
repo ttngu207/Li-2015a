@@ -119,6 +119,22 @@ def _get_photostim_time_and_duration(units, trials):
     return stim_time, stim_dur
 
 
+def _get_trial_event_times(events, units, trial_cond_name):
+    """
+    Get median event start times from all unit-trials from the specified "trial_cond_name" and "units" - aligned to GO CUE
+    :param events: list of events
+    """
+    events = list(events) + ['go']
+
+    event_types, event_times = (psth.TrialCondition().get_trials(trial_cond_name)
+                                * (experiment.TrialEvent & [{'trial_event_type': eve} for eve in events])
+                                & units).fetch('trial_event_type', 'trial_event_time')
+    period_starts = [np.nanmedian(np.array(event_times[event_types == event_type]).astype(float))
+                     for event_type in events]
+    period_starts = period_starts - period_starts[-1]  # align to go-cue
+    return period_starts[:-1]
+
+
 def _get_units_hemisphere(units):
     hemispheres = np.unique((ephys.ProbeInsertion.InsertionLocation
                              * experiment.BrainLocation & units).fetch('hemisphere'))

@@ -361,10 +361,10 @@ class PeriodSelectivity(dj.Computed):
             'start_event_type', 'start_time_shift', 'end_event_type', 'end_time_shift')
         start_event_q = {k['trial']: float(k['start_event_time'])
                          for k in (experiment.TrialEvent & key & {'trial_event_type': start_event}).proj(
-            start_event_time=f'trial_event_time - {start_tshift}').fetch(as_dict=True)}
+            start_event_time=f'trial_event_time + {start_tshift}').fetch(as_dict=True)}
         end_event_q = {k['trial']: float(k['end_event_time'])
                        for k in (experiment.TrialEvent & key & {'trial_event_type': end_event}).proj(
-            end_event_time=f'trial_event_time - {end_tshift}').fetch(as_dict=True)}
+            end_event_time=f'trial_event_time + {end_tshift}').fetch(as_dict=True)}
         cue_event_q = {k['trial']: float(k['trial_event_time'])
                        for k in (experiment.TrialEvent & key & {'trial_event_type': 'go'}).fetch(as_dict=True)}
 
@@ -375,9 +375,9 @@ class PeriodSelectivity(dj.Computed):
             stop_time = end_event_q[trial] - cue_event_q[trial]
             spk_rate = np.logical_and(spike_times >= start_time, spike_times < stop_time).sum() / (stop_time - start_time)
             if egpos['hemisphere'] == trial_instruct:
-                freq_c.append(spk_rate)
-            else:
                 freq_i.append(spk_rate)
+            else:
+                freq_c.append(spk_rate)
 
         # and testing for selectivity.
         t_stat, pval = sc_stats.ttest_ind(freq_i, freq_c, equal_var=True)
@@ -392,7 +392,7 @@ class PeriodSelectivity(dj.Computed):
             pref = ('ipsi-selective' if freq_i_m > freq_c_m
                     else 'contra-selective')
 
-        self.insert1({**key,'p_value': pval,
+        self.insert1({**key, 'p_value': pval,
                       'period_selectivity': pref,
                       'ipsi_firing_rate': freq_i_m,
                       'contra_firing_rate': freq_c_m})

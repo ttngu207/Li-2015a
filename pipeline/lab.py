@@ -120,37 +120,6 @@ class VirusSource(dj.Lookup):
 
 
 @schema
-class Serotype(dj.Manual):
-    definition = """
-    serotype   : varchar(60)
-    """
-
-
-@schema
-class Virus(dj.Manual):
-    definition = """
-    virus_id : int unsigned
-    ---
-    -> VirusSource 
-    -> Serotype
-    -> Person
-    virus_name      : varchar(256)
-    titer           : Decimal(20,1) # 
-    order_date      : date
-    remarks         : varchar(256)
-    """
-
-    class Notes(dj.Part):
-        definition = """
-        # Notes for virus
-        -> Virus
-        note_id     : int
-        ---
-        note        : varchar(256)
-        """
-
-
-@schema
 class SkullReference(dj.Lookup):
     definition = """
     skull_reference   : varchar(60)
@@ -180,48 +149,6 @@ class Hemisphere(dj.Lookup):
     hemisphere: varchar(32)
     """
     contents = zip(['left', 'right', 'both'])
-
-
-@schema
-class Surgery(dj.Manual):
-    definition = """
-    -> Subject
-    surgery_id          : int      # surgery number
-    ---
-    -> Person
-    start_time          : datetime # start time
-    end_time            : datetime # end time
-    surgery_description : varchar(256)
-    """
-    # TODO: confirm location pos/neg convention (contradict with 'BrainLocation' used photostim and ephys)
-    class VirusInjection(dj.Part):
-        definition = """
-        # Virus injections
-        -> master
-        injection_id : int
-        ---
-        -> Virus
-        -> SkullReference
-        ml_location     : Decimal(8,3) # um from ref left is positive 
-        ap_location     : Decimal(8,3) # um from ref anterior is positive
-        dv_location     : Decimal(8,3) # um from dura dorsal is positive 
-        volume          : Decimal(10,3) # in nl
-        dilution        : Decimal (10, 2) # 1 to how much
-        description     : varchar(256)
-        """
-
-    class Procedure(dj.Part):
-        definition = """
-        # Other things you did to the animal
-        -> master
-        procedure_id : int
-        ---
-        -> SkullReference
-        ml_location=null     : Decimal(8,3) # um from ref left is positive
-        ap_location=null     : Decimal(8,3) # um from ref anterior is positive
-        dv_location=null     : Decimal(8,3) # um from dura dorsal is positive 
-        surgery_procedure_description     : varchar(1000)
-        """
 
 
 @schema

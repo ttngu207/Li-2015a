@@ -151,6 +151,7 @@ class SessionTask(dj.Manual):
 class SessionComment(dj.Manual):
     definition = """
     -> Session
+    ---
     session_comment : varchar(767)
     """
 

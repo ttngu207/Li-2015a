@@ -31,7 +31,7 @@ def main(data_dir='./data/data_structure'):
 
     photostim_mapper = {1: 'PONS', 2: 'ALM'}
 
-    photostim_dur = 1.3
+    photostim_dur = Decimal('1.3')
 
     cell_type_mapper = {'pyramidal': 'Pyr', 'FS': 'FS', 'IT': 'IT', 'PT': 'PT'}
 

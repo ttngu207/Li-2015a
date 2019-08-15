@@ -159,7 +159,7 @@ def main(data_dir='./data/data_structure'):
                         photostim_events.append(dict(
                             pkey, **photostim_key, photostim_event_id=len(photostim_events)+1,
                             power=stim_power.max() if len(stim_power) > 0 else None,
-                            duration=photstim_detail['duration'],
+                            duration=Decimal(photstim_detail['duration']),
                             photostim_event_time=response_start - photstim_detail['pre_go_end_time'] - photstim_detail['duration'],
                             stim_spot_count=photstim_detail['spot'],
                             photostim_period=photstim_detail['period']))

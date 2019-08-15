@@ -1,5 +1,6 @@
 import os, sys
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
+import itertools
 
 from pipeline import lab, experiment, psth
 from pipeline import dict_to_hash
@@ -73,9 +74,10 @@ stim_periods = [None, 'sample', 'early_delay', 'middle_delay']
 
 trial_conditions = []
 for loc in stim_locs:
-    for period in stim_periods:
-        for instruction in (None, 'left', 'right'):
-            condition = {'trial_condition_name': '_'.join(filter(None, ['all', 'noearlylick', loc, period, 'stim', instruction])),
+    for instruction in (None, 'left', 'right'):
+        for period, stim_dur in itertools.product(stim_periods, (0.5, 0.8)):
+            condition = {'trial_condition_name': '_'.join(filter(None, ['all', 'noearlylick', loc,
+                                                                        period, str(stim_dur), 'stim', instruction])),
                          'trial_condition_func': '_get_trials_include_stim',
                          'trial_condition_arg': {
                              **{'_outcome': 'ignore',
@@ -84,7 +86,7 @@ for loc in stim_locs:
                                 'early_lick': 'no early',
                                 'brain_location_name': loc},
                              **({'trial_instruction': instruction} if instruction else {'_trial_instruction': 'non-performing'}),
-                             **({'photostim_period': period} if period else dict())}}
+                             **({'photostim_period': period, 'duration': stim_dur} if period else dict())}}
             trial_conditions.append(condition)
 
 psth.TrialCondition.insert_trial_conditions(trial_conditions)

@@ -269,7 +269,7 @@ class PhotostimEvent(dj.Imported):
     -> Photostim
     photostim_event_time=null: float    # (s) relative to trial start
     power=null : float                  # (mW) Maximal power 
-    duration=null: float                # (s)
+    duration=null: Decimal(6, 2)                # (s)
     stim_spot_count=null: int           # number of laser spot of photostimulation
     -> [nullable] PhotostimPeriod 
     """

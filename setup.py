@@ -3,6 +3,8 @@ from setuptools import setup, find_packages
 from os import path
 
 here = path.abspath(path.dirname(__file__))
+with open('requirements.txt') as f:
+    requirements = f.read().splitlines()
 
 setup(
     name='Li2015',
@@ -13,5 +15,5 @@ setup(
     license='MIT',
     url='https://github.com/vathes/Li-2015a',
     packages=find_packages(exclude=[]),
-    install_requires=['datajoint'],
+    install_requires=requirements,
 )

@@ -9,6 +9,8 @@ from scipy import signal
 
 log = logging.getLogger(__name__)
 
+if 'custom' not in dj.config:
+    dj.config['custom'] = {}
 
 datetime_formats = ('%Y%m%d %H%M%S', '%Y%m%d')
 

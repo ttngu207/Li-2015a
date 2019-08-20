@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-import os
+import os, sys
+sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
 
-import sys
 from datetime import datetime
 from dateutil.tz import tzlocal
 import pytz
@@ -21,10 +21,10 @@ hardware_filter = 'Bandpass filtered 300-6K Hz'
 institution = 'Janelia Research Campus'
 
 
-def export_to_nwb(session_key, nwb_output_dir=default_nwb_output_dir, save=False, overwrite=True):
+def export_to_nwb(session_key, nwb_output_dir=default_nwb_output_dir, save=False, overwrite=False):
 
     this_session = (experiment.Session & session_key).fetch1()
-
+    print(f'Exporting to NWB 2.0 for session: {this_session}...')
     # ===============================================================================
     # ============================== META INFORMATION ===============================
     # ===============================================================================
@@ -156,13 +156,13 @@ def export_to_nwb(session_key, nwb_output_dir=default_nwb_output_dir, save=False
             aom_series = pynwb.ogen.OptogeneticSeries(
                 name=stim_site.name + '_aom_input_trace',
                 site=stim_site, unit='mW', resolution=0.0, conversion=1e-6,
-                data = np.hstack(aom_input_trace),
-                timestamps = np.hstack(time_vecs + trial_starts.astype(float)))
+                data=np.hstack(aom_input_trace),
+                timestamps=np.hstack(time_vecs + trial_starts.astype(float)))
             laser_series = pynwb.ogen.OptogeneticSeries(
                 name=stim_site.name + '_laser_power',
                 site=stim_site, unit='mW', resolution=0.0, conversion=1e-6,
-                data = np.hstack(laser_power),
-                timestamps = np.hstack(time_vecs + trial_starts.astype(float)))
+                data=np.hstack(laser_power),
+                timestamps=np.hstack(time_vecs + trial_starts.astype(float)))
 
             nwbfile.add_stimulus(aom_series)
             nwbfile.add_stimulus(laser_series)
@@ -218,14 +218,15 @@ def export_to_nwb(session_key, nwb_output_dir=default_nwb_output_dir, save=False
             experiment.PhotostimEvent * experiment.SessionTrial & session_key).fetch(
         'photostim_event_time', 'start_time', 'photo_stim', 'power', 'duration')
 
-    behav_event.create_timeseries(name='photostim_start_time', unit='a.u.', conversion=1.0,
-                                  data=power,
-                                  timestamps=photostim_event_time.astype(float) + trial_starts.astype(float),
-                                  control=photo_stim, control_description=stim_sites)
-    behav_event.create_timeseries(name='photostim_stop_time', unit='a.u.', conversion=1.0,
-                                  data=np.full_like(photostim_event_time, 0),
-                                  timestamps=photostim_event_time.astype(float) + duration + trial_starts.astype(float),
-                                  control=photo_stim, control_description=stim_sites)
+    if len(photostim_event_time) > 0:
+        behav_event.create_timeseries(name='photostim_start_time', unit='a.u.', conversion=1.0,
+                                      data=power,
+                                      timestamps=photostim_event_time.astype(float) + trial_starts.astype(float),
+                                      control=photo_stim.astype('uint8'), control_description=stim_sites)
+        behav_event.create_timeseries(name='photostim_stop_time', unit='a.u.', conversion=1.0,
+                                      data=np.full_like(photostim_event_time, 0),
+                                      timestamps=photostim_event_time.astype(float) + duration + trial_starts.astype(float),
+                                      control=photo_stim.astype('uint8'), control_description=stim_sites)
 
     # =============== Write NWB 2.0 file ===============
     if save:

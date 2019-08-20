@@ -129,10 +129,9 @@ def _get_trial_event_times(events, units, trial_cond_name):
     event_types, event_times = (psth.TrialCondition().get_trials(trial_cond_name)
                                 * (experiment.TrialEvent & [{'trial_event_type': eve} for eve in events])
                                 & units).fetch('trial_event_type', 'trial_event_time')
-    period_starts = [np.nanmedian(np.array(event_times[event_types == event_type]).astype(float))
-                     for event_type in events]
-    period_starts = period_starts - period_starts[-1]  # align to go-cue
-    return period_starts[:-1]
+    period_starts = [np.nanmedian((event_times[event_types == event_type] - event_times[event_types == 'go']).astype(float))
+                     for event_type in events[:-1]]
+    return period_starts
 
 
 def _get_units_hemisphere(units):

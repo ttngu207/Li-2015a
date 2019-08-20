@@ -461,25 +461,53 @@ def plot_psth_photostim_effect(units, condition_name_kw=['both_alm'], axs=None):
     axs[1].axvspan(stim_time, stim_time + stim_dur, alpha=0.3, color='royalblue')
 
 
-def plot_selectivity_change_photostim_effect(units, condition_name_kw, ax=None):
+def plot_selectivity_change_photostim_effect(units, condition_name_kw, recover_time_window=None, ax=None):
+    """
+    For each unit in the specified units, extract:
+    + control, left-instruct PSTH (ctrl_left)
+    + control, right-instruct PSTH (ctrl_right)
+    + stim, left-instruct PSTH (stim_left)
+    + stim, right-instruct PSTH (stim_right)
+    Then, control_PSTH and stim_PSTH is defined as
+        (ctrl_left - ctrl_right) for ipsi-selective unit that locates on the left-hemisphere, and vice versa
+        (stim_left - stim_right) for ipsi-selective unit that locates on the left-hemisphere, and vice versa
+    Selectivity change is then defined as: control_PSTH - stim_PSTH
+    """
     trial_cond_name = psth.TrialCondition.get_cond_name_from_keywords(['good_noearlylick_', '_hit'])[0]
     period_starts = _get_trial_event_times(['sample', 'delay', 'go'], units, trial_cond_name)
 
+    stim_trial_cond_name = psth.TrialCondition.get_cond_name_from_keywords(condition_name_kw + ['_stim'])[0]
+    stim_time, stim_dur = _get_photostim_time_and_duration(units,
+                                                           psth.TrialCondition().get_trials(stim_trial_cond_name))
+
     ctrl_left_cond_name = 'all_noearlylick_nostim_left'
     ctrl_right_cond_name = 'all_noearlylick_nostim_right'
-    stim_left_cond_name = psth.TrialCondition().get_cond_name_from_keywords(set(list(condition_name_kw)
-                                                                                + ['noearlylick', 'stim', 'left']))[0]
-    stim_right_cond_name = psth.TrialCondition().get_cond_name_from_keywords(set(list(condition_name_kw)
-                                                                                 + ['noearlylick', 'stim', 'right']))[0]
+    stim_left_cond_name = psth.TrialCondition().get_cond_name_from_keywords(condition_name_kw
+                                                                            + ['noearlylick', 'stim', 'left'])[0]
+    stim_right_cond_name = psth.TrialCondition().get_cond_name_from_keywords(condition_name_kw
+                                                                             + ['noearlylick', 'stim', 'right'])[0]
 
     delta_sels, ctrl_psths = [], []
     for unit in (units * psth.UnitSelectivity & 'unit_selectivity != "non-selective"').proj('unit_selectivity').fetch(as_dict=True):
+        # ---- trial count criteria ----
+        # no less than 5 trials for control
+        if (len(psth.TrialCondition.get_trials(ctrl_left_cond_name) & unit) < 5
+                or len(psth.TrialCondition.get_trials(ctrl_right_cond_name) & unit) < 5):
+            continue
+        # no less than 2 trials for stimulation
+        if (len(psth.TrialCondition.get_trials(stim_left_cond_name) & unit) < 2
+                or len(psth.TrialCondition.get_trials(stim_right_cond_name) & unit) < 2):
+            continue
+
         hemi = _get_units_hemisphere(unit)
 
-        ctrl_left_psth, t_vec = psth.UnitPsth.get_plotting_data(unit, ctrl_left_cond_name)['psth']
-        ctrl_right_psth, _ = psth.UnitPsth.get_plotting_data(unit, ctrl_right_cond_name)['psth']
-        stim_left_psth, _ = psth.UnitPsth.get_plotting_data(unit, stim_left_cond_name)['psth']
-        stim_right_psth, _ = psth.UnitPsth.get_plotting_data(unit, stim_right_cond_name)['psth']
+        ctrl_left_psth, t_vec = psth.UnitPsth.get_plotting_data(unit, {'trial_condition_name': ctrl_left_cond_name})['psth']
+        ctrl_right_psth, _ = psth.UnitPsth.get_plotting_data(unit, {'trial_condition_name': ctrl_right_cond_name})['psth']
+        try:
+            stim_left_psth, _ = psth.UnitPsth.get_plotting_data(unit, {'trial_condition_name': stim_left_cond_name})['psth']
+            stim_right_psth, _ = psth.UnitPsth.get_plotting_data(unit, {'trial_condition_name': stim_right_cond_name})['psth']
+        except:
+            continue
 
         if unit['unit_selectivity'] == 'ipsi-selective':
             ctrl_psth_diff = ctrl_left_psth - ctrl_right_psth if hemi == 'left' else ctrl_right_psth - ctrl_left_psth
@@ -494,23 +522,31 @@ def plot_selectivity_change_photostim_effect(units, condition_name_kw, ax=None):
     ctrl_psths = np.vstack(ctrl_psths)
     delta_sels = np.vstack(delta_sels)
 
-    recovery_times = []
-    for i in range(1000):
-        i_sample = np.random.choice(len(units), len(units), replace=True)
-        btstrp_diff = delta_sels[i_sample, :] / ctrl_psths[i_sample, :]
-        t_recovered = t_vec[np.logical_and(btstrp_diff < 0.2, t_vec > -1.6, t_vec < 1)]
-        if len(t_recovered) > 0:
-            recovery_times.append(t_recovered[0])
-
     if ax is None:
         fig, ax = plt.subplots(1, 1, figsize=(4, 6))
 
     _plot_with_sem(delta_sels, t_vec, ax)
-    ax.axvline(x=np.mean(recovery_times), linestyle='--', color='g')
-    ax.axvspan(np.mean(recovery_times) - np.std(recovery_times), np.mean(recovery_times) + np.std(recovery_times),
-               alpha=0.3, color='g')
+
+    if recover_time_window:
+        recovery_times = []
+        for i in range(1000):
+            i_sample = np.random.choice(delta_sels.shape[0], delta_sels.shape[0], replace = True)
+            btstrp_diff = np.nanmean(delta_sels[i_sample, :], axis = 0) / np.nanmean(ctrl_psths[i_sample, :], axis = 0)
+            t_recovered = t_vec[
+                (btstrp_diff < 0.2) & (t_vec > recover_time_window[0]) & (t_vec < recover_time_window[1])]
+            if len(t_recovered) > 0:
+                recovery_times.append(t_recovered[0])
+        ax.axvline(x = np.mean(recovery_times), linestyle = '--', color = 'g')
+        ax.axvspan(np.mean(recovery_times) - np.std(recovery_times), np.mean(recovery_times) + np.std(recovery_times),
+                   alpha = 0.2, color = 'g')
+
+    ax.axhline(y=0, color = 'k')
     for x in period_starts:
         ax.axvline(x=x, linestyle = '--', color = 'k')
+    # add shaded bar for photostim
+    ax.axvspan(stim_time, stim_time + stim_dur, 0.95, 1, alpha = 0.3, color = 'royalblue')
+    ax.set_ylabel('Selectivity change (spike/s)')
+    ax.set_xlabel('Time (s)')
 
 
 def plot_coding_direction(units, time_period=None, axs=None):

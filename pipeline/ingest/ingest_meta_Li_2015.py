@@ -12,7 +12,7 @@ from pipeline import lab, experiment, ephys, virus
 from pipeline import parse_date
 
 
-def main(meta_data_dir='./data/meta_data'):
+def main(meta_data_dir='./data/meta_data', reingest=False):
     meta_data_dir = pathlib.Path(meta_data_dir)
     if not meta_data_dir.exists():
         raise FileNotFoundError(f'Path not found!! {meta_data_dir.as_posix()}')
@@ -31,7 +31,8 @@ def main(meta_data_dir='./data/meta_data'):
     # ================== INGESTION OF METADATA ==================
 
     # ---- delete all Sessions ----
-    experiment.Session.delete()
+    if reingest:
+        experiment.Session.delete()
 
     # ---- insert metadata ----
     meta_data_files = meta_data_dir.glob('*.mat')

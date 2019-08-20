@@ -209,10 +209,11 @@ def export_to_nwb(session_key, nwb_output_dir=default_nwb_output_dir, save=False
         event_times, trial_starts = (experiment.TrialEvent * experiment.SessionTrial
                                      & session_key & {'trial_event_type': trial_event_type}).fetch(
             'trial_event_time', 'start_time')
-        event_times = np.hstack(event_times.astype(float) + trial_starts.astype(float))
-        behav_event.create_timeseries(name=trial_event_type, unit='a.u.', conversion=1.0,
-                                      data=np.full_like(event_times, 1),
-                                      timestamps=event_times)
+        if len(event_times) > 0:
+            event_times = np.hstack(event_times.astype(float) + trial_starts.astype(float))
+            behav_event.create_timeseries(name=trial_event_type, unit='a.u.', conversion=1.0,
+                                          data=np.full_like(event_times, 1),
+                                          timestamps=event_times)
 
     photostim_event_time, trial_starts, photo_stim, power, duration = (
             experiment.PhotostimEvent * experiment.SessionTrial & session_key).fetch(
@@ -225,7 +226,7 @@ def export_to_nwb(session_key, nwb_output_dir=default_nwb_output_dir, save=False
                                       control=photo_stim.astype('uint8'), control_description=stim_sites)
         behav_event.create_timeseries(name='photostim_stop_time', unit='a.u.', conversion=1.0,
                                       data=np.full_like(photostim_event_time, 0),
-                                      timestamps=photostim_event_time.astype(float) + duration + trial_starts.astype(float),
+                                      timestamps=photostim_event_time.astype(float) + duration.astype(float) + trial_starts.astype(float),
                                       control=photo_stim.astype('uint8'), control_description=stim_sites)
 
     # =============== Write NWB 2.0 file ===============

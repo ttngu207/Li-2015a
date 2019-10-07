@@ -10,10 +10,13 @@ import numpy as np
 import json
 import pandas as pd
 import datajoint as dj
+import warnings
 
 from pipeline import (lab, experiment, ephys, psth, tracking, virus)
 import pynwb
 from pynwb import NWBFile, NWBHDF5IO
+
+warnings.filterwarnings('ignore', module='pynwb')
 
 # ============================== SET CONSTANTS ==========================================
 default_nwb_output_dir = os.path.join('data', 'NWB 2.0')
@@ -176,12 +179,12 @@ def export_to_nwb(session_key, nwb_output_dir=default_nwb_output_dir, save=False
 
             aom_series = pynwb.ogen.OptogeneticSeries(
                 name=stim_site.name + '_aom_input_trace',
-                site=stim_site, unit='mW', resolution=0.0, conversion=1e-6,
+                site=stim_site, resolution=0.0, conversion=1e-3,
                 data=np.hstack(aom_input_trace),
                 timestamps=np.hstack(time_vecs + trial_starts.astype(float)))
             laser_series = pynwb.ogen.OptogeneticSeries(
                 name=stim_site.name + '_laser_power',
-                site=stim_site, unit='mW', resolution=0.0, conversion=1e-6,
+                site=stim_site, resolution=0.0, conversion=1e-3,
                 data=np.hstack(laser_power),
                 timestamps=np.hstack(time_vecs + trial_starts.astype(float)))
 

@@ -8,6 +8,12 @@ from pipeline import dict_to_hash
 
 # ================== DEFINE LOOK-UP ==================
 
+# ==================== Project =====================
+
+experiment.Project.insert([('li2015', '', 'doi:10.1038/nature14178'),
+                           ('lidaie2016', '', 'doi:10.1038/nature17643')],
+                          skip_duplicates=True)
+
 # ==================== Probe =====================
 # Probe - NeuroNexus Silicon Probe
 probe = 'A4x8-5mm-100-200-177'

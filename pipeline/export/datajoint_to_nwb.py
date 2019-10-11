@@ -9,16 +9,33 @@ import re
 import numpy as np
 import json
 import pandas as pd
+import datajoint as dj
+import warnings
 
 from pipeline import (lab, experiment, ephys, psth, tracking, virus)
 import pynwb
 from pynwb import NWBFile, NWBHDF5IO
 
+warnings.filterwarnings('ignore', module='pynwb')
+
 # ============================== SET CONSTANTS ==========================================
 default_nwb_output_dir = os.path.join('data', 'NWB 2.0')
 zero_zero_time = datetime.strptime('00:00:00', '%H:%M:%S').time()  # no precise time available
 hardware_filter = 'Bandpass filtered 300-6K Hz'
+ecephys_fs = 19531.25
 institution = 'Janelia Research Campus'
+
+if dj.config['custom']['database.prefix'] == 'li2015_':
+    related_publications = 'doi:10.1038/nature14178'
+    experiment_description = 'Extracellular electrophysiology recordings with optogenetic perturbations performed on anterior lateral region of the mouse cortex during object location discrimination task'
+    keywords = ['motor planning', 'preparatory activity', 'whiskers',
+                'optogenetic perturbations', 'extracellular electrophysiology']
+
+elif dj.config['custom']['database.prefix'] == 'lidaie2016_':
+    related_publications = 'doi:10.1038/nature17643'
+    experiment_description = 'Extracellular electrophysiology recordings with optogenetic perturbations performed on anterior lateral region of the mouse cortex during object location discrimination task'
+    keywords = ['motor planning', 'premotor cortex', 'whiskers',
+                'optogenetic perturbations', 'extracellular electrophysiology']
 
 
 def export_to_nwb(session_key, nwb_output_dir=default_nwb_output_dir, save=False, overwrite=False):
@@ -38,7 +55,11 @@ def export_to_nwb(session_key, nwb_output_dir=default_nwb_output_dir, save=False
         session_start_time=datetime.combine(this_session['session_date'], zero_zero_time),
         file_create_date=datetime.now(tzlocal()),
         experimenter=this_session['username'],
-        institution=institution)
+        institution=institution,
+        experiment_description=experiment_description,
+        related_publications=related_publications,
+        keywords=keywords)
+
     # -- subject
     subj = (lab.Subject & session_key).fetch1()
     nwbfile.subject = pynwb.file.Subject(
@@ -80,6 +101,7 @@ def export_to_nwb(session_key, nwb_output_dir=default_nwb_output_dir, save=False
             nwbfile.add_electrode(id=chn['electrode'],
                                   group=electrode_groups[chn['electrode_group']],
                                   filtering=hardware_filter,
+
                                   imp=-1.,
                                   x=chn['x_coord'] if chn['x_coord'] else np.nan,
                                   y=chn['y_coord'] if chn['y_coord'] else np.nan,
@@ -87,9 +109,10 @@ def export_to_nwb(session_key, nwb_output_dir=default_nwb_output_dir, save=False
                                   location=electrode_groups[chn['electrode_group']].location)
 
         # --- unit spike times ---
+        nwbfile.add_unit_column(name='sampling_rate', description='Sampling rate of the raw voltage traces (Hz)')
         nwbfile.add_unit_column(name='quality', description='unit quality from clustering')
-        nwbfile.add_unit_column(name='posx', description='estimated x position of the unit relative to probe (0,0)')
-        nwbfile.add_unit_column(name='posy', description='estimated y position of the unit relative to probe (0,0)')
+        nwbfile.add_unit_column(name='posx', description='estimated x position of the unit relative to probe (0,0) (um)')
+        nwbfile.add_unit_column(name='posy', description='estimated y position of the unit relative to probe (0,0) (um)')
         nwbfile.add_unit_column(name='amp', description='unit amplitude')
         nwbfile.add_unit_column(name='snr', description='unit signal-to-noise')
         nwbfile.add_unit_column(name='cell_type', description='cell type (e.g. fast spiking or pyramidal)')
@@ -99,6 +122,7 @@ def export_to_nwb(session_key, nwb_output_dir=default_nwb_output_dir, save=False
             nwbfile.add_unit(id=unit['unit'],
                              electrodes=[unit['electrode']],
                              electrode_group=electrode_groups[unit['electrode_group']],
+                             sampling_rate=ecephys_fs,
                              quality=unit['unit_quality'],
                              posx=unit['unit_posx'],
                              posy=unit['unit_posy'],
@@ -155,12 +179,12 @@ def export_to_nwb(session_key, nwb_output_dir=default_nwb_output_dir, save=False
 
             aom_series = pynwb.ogen.OptogeneticSeries(
                 name=stim_site.name + '_aom_input_trace',
-                site=stim_site, unit='mW', resolution=0.0, conversion=1e-6,
+                site=stim_site, resolution=0.0, conversion=1e-3,
                 data=np.hstack(aom_input_trace),
                 timestamps=np.hstack(time_vecs + trial_starts.astype(float)))
             laser_series = pynwb.ogen.OptogeneticSeries(
                 name=stim_site.name + '_laser_power',
-                site=stim_site, unit='mW', resolution=0.0, conversion=1e-6,
+                site=stim_site, resolution=0.0, conversion=1e-3,
                 data=np.hstack(laser_power),
                 timestamps=np.hstack(time_vecs + trial_starts.astype(float)))
 
@@ -177,7 +201,7 @@ def export_to_nwb(session_key, nwb_output_dir=default_nwb_output_dir, save=False
     # and column description)
 
     dj_trial = experiment.SessionTrial * experiment.BehaviorTrial
-    skip_adding_columns = experiment.Session.primary_key + ['trial_uid']
+    skip_adding_columns = experiment.Session.primary_key + ['trial_uid', 'trial']
 
     if experiment.SessionTrial & session_key:
         # Get trial descriptors from TrialSet.Trial and TrialStimInfo
@@ -195,6 +219,7 @@ def export_to_nwb(session_key, nwb_output_dir=default_nwb_output_dir, save=False
         for trial in (dj_trial & session_key).fetch(as_dict=True):
             trial['start_time'] = float(trial['start_time'])
             trial['stop_time'] = float(trial['stop_time']) if trial['stop_time'] else 5.0
+            trial['id'] = trial['trial']  # rename 'trial_id' to 'id'
             [trial.pop(k) for k in skip_adding_columns]
             nwbfile.add_trial(**trial)
 

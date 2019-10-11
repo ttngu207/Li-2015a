@@ -12,7 +12,10 @@ from pipeline import lab, experiment, ephys, virus
 from pipeline import parse_date
 
 
-def main(meta_data_dir='./data/meta_data', reingest=False):
+dj.config['safemode'] = False
+
+
+def main(meta_data_dir='./data/meta_data', reingest=True):
     meta_data_dir = pathlib.Path(meta_data_dir)
     if not meta_data_dir.exists():
         raise FileNotFoundError(f'Path not found!! {meta_data_dir.as_posix()}')
@@ -27,12 +30,13 @@ def main(meta_data_dir='./data/meta_data', reingest=False):
     # ---- from lookup ----
     probe = 'A4x8-5mm-100-200-177'
     electrode_config_name = 'silicon32'
+    project_name = 'li2015'
 
     # ================== INGESTION OF METADATA ==================
 
     # ---- delete all Sessions ----
     if reingest:
-        experiment.Session.delete()
+        (experiment.Session & (experiment.ProjectSession & {'project_name': project_name}).fetch('KEY')).delete()
 
     # ---- insert metadata ----
     meta_data_files = meta_data_dir.glob('*.mat')
@@ -88,6 +92,7 @@ def main(meta_data_dir='./data/meta_data', reingest=False):
                            session=len(experiment.Session & subject_key) + 1,
                            session_date=parse_date(meta_data.dateOfExperiment + ' ' + meta_data.timeOfExperiment))
         experiment.Session.insert1(session_key, ignore_extra_fields=True)
+        experiment.ProjectSession.insert1({**session_key, 'project_name': project_name}, ignore_extra_fields=True)
 
         print(f'\tInsert Session - {session_key["subject_id"]} - {session_key["session_date"]}')
 

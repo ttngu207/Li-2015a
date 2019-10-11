@@ -77,7 +77,7 @@ def main(data_dir='./data/data_structure'):
                 session_letter_mapper = {letter: s_no for letter, s_no in zip(session_suffixes, sess_num)}
                 session_key = (sessions & {'session': session_letter_mapper[fname[-1]]}).fetch1('KEY')
             else:
-                raise Exception('Multiple sessions found for {fname}')
+                raise Exception(f'Multiple sessions found for {fname}')
 
         print(f'\tMatched: {session_key}')
 

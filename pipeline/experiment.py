@@ -7,6 +7,7 @@ from . import get_schema_name
 
 schema = dj.schema(get_schema_name('experiment'))
 
+
 @schema
 class BrainLocation(dj.Manual):
     definition = """
@@ -303,3 +304,23 @@ class EventPeriod(dj.Lookup):
                 ('delay', 'delay', 0, 'go', 0),
                 ('response', 'go', 0, 'go', 1.3)]
 
+
+# ============================= PROJECTS ==================================================
+
+
+@schema
+class Project(dj.Manual):
+    definition = """
+    project_name: varchar(128)
+    ---
+    project_desc='': varchar(1000) 
+    publication='': varchar(256)  # e.g. publication doi    
+    """
+
+
+@schema
+class ProjectSession(dj.Manual):
+    definition = """
+    -> Project
+    -> Session
+    """

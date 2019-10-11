@@ -1,7 +1,8 @@
-# Li 2015 and Li-Daie 2016
-DataJoint-NWB conversion project for Li et al. (2015) and Li, Daie et al. (2016) paper
+# Li et al., 2015 and Li, Daie et al., 2016
+DataJoint-NWB conversion project for Li et al. (2015) and Li, Daie et al. (2016) papers.
  
-This project presents a DataJoint pipeline design for the data accompanying the paper
+This project presents a DataJoint pipeline design for the data accompanying the following papers:
+
 >Nuo Li, Tsai-Wen Chen, Zengcai V. Guo, Charles R. Gerfen & Karel Svoboda. "A motor cortex circuit for motor planning and movement" (2015) Nature (https://dx.doi.org/10.1038/nature14178)
 
 Data available at: https://crcns.org/data-sets/motor-cortex/alm-1
@@ -23,8 +24,8 @@ This repository contains the **Python 3.7** code to convert the DataJoint pipeli
 Each NWB file represents one recording session. The conversion script can be found [here](scripts/datajoint_to_nwb.py)
 
 ## Demonstration of the data pipeline
-Data queries and usages are demonstrated in the Jupyter notebooks: [Li 2015](notebooks/Li-2015-demo.ipynb)
- and [Li-Daie 2016](notebooks/Li-Daie-2016-Demo.ipynb), where several figures from the paper are reproduced. 
+Data queries and usages are demonstrated in the Jupyter notebooks: [Li 2015](notebooks/Li-2015-examples.ipynb)
+ and [Li-Daie 2016](notebooks/Li-Daie-2016-examples.ipynb), where several figures from the paper are reproduced. 
 
 ## Schema Diagram
 ### Behavior

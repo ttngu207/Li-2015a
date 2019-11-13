@@ -119,7 +119,7 @@ jupyter notebook
 ```
 
 ### Export to NWB 2.0
-Data from this DataJoint pipeline can be exported in NWB 2.0 format using this [datajoint_to_nwb.py](../scripts/datajoint_to_nwb.py) script. 
+Data from this DataJoint pipeline can be exported in NWB 2.0 format using this [datajoint_to_nwb.py](pipeline/export/datajoint_to_nwb.py) script. 
 To perform this export for all ingested data, specify the export location (e.g. `./data/exported_nwb2.0`), execute this command from the project root:
 
 ```

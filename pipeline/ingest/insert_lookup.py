@@ -18,7 +18,9 @@ experiment.Project.insert([('li2015', '', 'doi:10.1038/nature14178'),
 # Probe - NeuroNexus Silicon Probe
 probe = 'A4x8-5mm-100-200-177'
 lab.Probe.insert1({'probe': probe,
-                   'probe_type': 'nn_silicon_probe'}, skip_duplicates=True)
+                   'probe_type': 'nn_silicon_probe',
+                   'probe_comment': 'NeuroNexus silicon probes (part no. A4x8-5mm-100-200-177). The 32 channel voltage signals were multiplexed, recorded on a PCI6133 board at 312.5 kHz (National instrument), and digitized at 14 bit. The signals were demultiplexed into the 32 voltage traces, sampled at 19531.25 Hz and stored for offline analyses.'},
+                  skip_duplicates=True)
 lab.Probe.Electrode.insert(({'probe': probe, 'electrode': x} for x in range(1, 33)), skip_duplicates=True)
 
 electrode_group = {'probe': probe, 'electrode_group': 0}

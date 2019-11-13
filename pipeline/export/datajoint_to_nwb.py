@@ -61,9 +61,10 @@ def export_to_nwb(session_key, nwb_output_dir=default_nwb_output_dir, save=False
         keywords=keywords)
 
     # -- subject
-    subj = (lab.Subject & session_key).fetch1()
+    subj = (lab.Subject & session_key).aggr(lab.Subject.Strain, ..., strains='GROUP_CONCAT(animal_strain)').fetch1()
     nwbfile.subject = pynwb.file.Subject(
         subject_id=str(this_session['subject_id']),
+        description=f'source: {subj["animal_source"]}; strains: {subj["strains"]}',
         genotype=' x '.join((lab.Subject.GeneModification
                              & subj).fetch('gene_modification')),
         sex=subj['sex'],
@@ -101,7 +102,6 @@ def export_to_nwb(session_key, nwb_output_dir=default_nwb_output_dir, save=False
             nwbfile.add_electrode(id=chn['electrode'],
                                   group=electrode_groups[chn['electrode_group']],
                                   filtering=hardware_filter,
-
                                   imp=-1.,
                                   x=chn['x_coord'] if chn['x_coord'] else np.nan,
                                   y=chn['y_coord'] if chn['y_coord'] else np.nan,
@@ -113,21 +113,17 @@ def export_to_nwb(session_key, nwb_output_dir=default_nwb_output_dir, save=False
         nwbfile.add_unit_column(name='quality', description='unit quality from clustering')
         nwbfile.add_unit_column(name='posx', description='estimated x position of the unit relative to probe (0,0) (um)')
         nwbfile.add_unit_column(name='posy', description='estimated y position of the unit relative to probe (0,0) (um)')
-        nwbfile.add_unit_column(name='amp', description='unit amplitude')
-        nwbfile.add_unit_column(name='snr', description='unit signal-to-noise')
         nwbfile.add_unit_column(name='cell_type', description='cell type (e.g. fast spiking or pyramidal)')
 
         for unit in (ephys.Unit * ephys.UnitCellType & probe_insertion).fetch(as_dict=True):
             # make an electrode table region (which electrode(s) is this unit coming from)
             nwbfile.add_unit(id=unit['unit'],
-                             electrodes=[unit['electrode']],
+                             electrodes=np.where(np.array(nwbfile.electrodes.id.data) == unit['electrode'])[0],
                              electrode_group=electrode_groups[unit['electrode_group']],
                              sampling_rate=ecephys_fs,
                              quality=unit['unit_quality'],
                              posx=unit['unit_posx'],
                              posy=unit['unit_posy'],
-                             amp=unit['unit_amp'] if unit['unit_amp'] else np.nan,
-                             snr=unit['unit_snr'] if unit['unit_amp'] else np.nan,
                              cell_type=unit['cell_type'],
                              spike_times=unit['spike_times'],
                              waveform_mean=np.mean(unit['waveform'], axis=0),
@@ -145,6 +141,7 @@ def export_to_nwb(session_key, nwb_output_dir=default_nwb_output_dir, save=False
         nwbfile.add_acquisition(behav_acq)
         behav_acq.create_timeseries(name='lick_trace', unit='a.u.', conversion=1.0,
                                     data=np.hstack(lick_traces),
+                                    description="Time-series of the animal's tongue movement when licking",
                                     timestamps=np.hstack(time_vecs + trial_starts.astype(float)))
 
     # ===============================================================================
@@ -218,7 +215,7 @@ def export_to_nwb(session_key, nwb_output_dir=default_nwb_output_dir, save=False
         # Add entry to the trial-table
         for trial in (dj_trial & session_key).fetch(as_dict=True):
             trial['start_time'] = float(trial['start_time'])
-            trial['stop_time'] = float(trial['stop_time']) if trial['stop_time'] else 5.0
+            trial['stop_time'] = float(trial['stop_time']) if trial['stop_time'] else np.nan
             trial['id'] = trial['trial']  # rename 'trial_id' to 'id'
             [trial.pop(k) for k in skip_adding_columns]
             nwbfile.add_trial(**trial)
@@ -261,7 +258,7 @@ def export_to_nwb(session_key, nwb_output_dir=default_nwb_output_dir, save=False
             os.makedirs(nwb_output_dir)
         if not overwrite and os.path.exists(os.path.join(nwb_output_dir, save_file_name)):
             return nwbfile
-        with NWBHDF5IO(os.path.join(nwb_output_dir, save_file_name), mode = 'w') as io:
+        with NWBHDF5IO(os.path.join(nwb_output_dir, save_file_name), mode='w') as io:
             io.write(nwbfile)
             print(f'Write NWB 2.0 file: {save_file_name}')
 

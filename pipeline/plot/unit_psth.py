@@ -30,7 +30,7 @@ def _plot_spike_raster(ipsi, contra, vlines=[], shade_bar=None, ax=None, title='
     for x in vlines:
         ax.axvline(x=x, linestyle='--', color='k')
     if shade_bar is not None:
-        ax.axvspan(shade_bar[0], shade_bar[0] + shade_bar[1], alpha = 0.3, color = 'royalblue')
+        ax.axvspan(shade_bar[0], shade_bar[0] + shade_bar[1], alpha=0.3, color='royalblue')
 
     ax.set_axis_off()
     ax.set_xlim(xlim)

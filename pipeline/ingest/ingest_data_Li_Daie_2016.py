@@ -55,6 +55,8 @@ def main(data_dir='./data/data_structure'):
     task_protocol = {'task': 'audio delay', 'task_protocol': 1}
 
     clustering_method = 'manual'
+
+    project_name = 'lidaie2016'
     
     insert_kwargs = {'ignore_extra_fields': True, 'allow_direct_insert': True, 'skip_duplicates': True}
 
@@ -68,7 +70,8 @@ def main(data_dir='./data/data_structure'):
         subject_id = int(re.search('ANM\d+', fname).group().replace('ANM', ''))
         session_date = parse_date(re.search('_\d+', fname).group().replace('_', ''))
 
-        sessions = (experiment.Session & {'subject_id': subject_id, 'session_date': session_date})
+        sessions = (experiment.Session & (experiment.ProjectSession & {'project_name': project_name})
+                    & {'subject_id': subject_id, 'session_date': session_date})
         if len(sessions) < 2:
             session_key = sessions.fetch1('KEY')
         else:

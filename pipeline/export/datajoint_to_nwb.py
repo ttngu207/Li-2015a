@@ -117,9 +117,17 @@ def export_to_nwb(session_key, nwb_output_dir=default_nwb_output_dir, save=False
 
         for unit_key in (ephys.Unit * ephys.UnitCellType & probe_insertion).fetch('KEY'):
             unit = (ephys.Unit * ephys.UnitCellType & probe_insertion & unit_key).proj(..., '-spike_times').fetch1()
-            obs_intervals = np.array(list(zip(*(ephys.TrialSpikes * experiment.SessionTrial & unit_key).fetch(
-                'start_time', 'stop_time')))).astype(float)
-            spike_times = np.hstack((ephys.TrialSpikes & unit_key).fetch('spike_times'))
+            if ephys.TrialSpikes & unit_key:
+                obs_intervals = np.array(list(zip(*(ephys.TrialSpikes * experiment.SessionTrial & unit_key).fetch(
+                    'start_time', 'stop_time')))).astype(float)
+                spike_times = np.hstack((ephys.TrialSpikes & unit_key).fetch('spike_times'))
+            else:  # the case of unavailable `TrialSpikes`
+                spike_times = (ephys.Unit & unit_key).fetch1('spike_times')
+                obs_intervals = np.array(list(zip(*(experiment.SessionTrial & unit_key).fetch(
+                    'start_time', 'stop_time')))).astype(float)
+                obs_intervals = [interval for interval in obs_intervals
+                                 if np.logical_and(spike_times >= interval[0], spike_times <= interval[-1]).any()]
+
             # make an electrode table region (which electrode(s) is this unit coming from)
             nwbfile.add_unit(id=unit['unit'],
                              electrodes=np.where(np.array(nwbfile.electrodes.id.data) == unit['electrode'])[0],

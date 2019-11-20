@@ -101,9 +101,9 @@ def main(meta_data_dir='./data/meta_data', reingest=True):
                                                               hemisphere=hemi,
                                                               skull_reference=skull_reference)).fetch1('KEY')
         insertion_loc_key = dict(brain_location_key,
-                                 ml_location=meta_data.extracellular.recordingCoordinates[0] * 1000,  # mm to um
-                                 ap_location=meta_data.extracellular.recordingCoordinates[1] * 1000,  # mm to um
-                                 dv_location=meta_data.extracellular.recordingCoordinates[2])         # already in um
+                                 ap_location=meta_data.extracellular.recordingCoordinates[0] * 1000,  # mm to um
+                                 ml_location=meta_data.extracellular.recordingCoordinates[1] * 1000,  # mm to um
+                                 dv_location=meta_data.extracellular.recordingCoordinates[2] * -1)    # already in um
 
         with ephys.ProbeInsertion.connection.transaction:
             ephys.ProbeInsertion.insert1(dict(session_key, insertion_number=1, probe=probe,
@@ -140,9 +140,9 @@ def main(meta_data_dir='./data/meta_data', reingest=True):
 
             virus.VirusInjection.insert([dict(virus_injection,
                                               injection_id=inj_idx + 1,
-                                              ml_location = coord[0] * 1000,
-                                              ap_location = coord[1] * 1000,
-                                              dv_location = coord[2] * 1000,
+                                              ap_location = coord[0] * 1000,
+                                              ml_location = coord[1] * 1000,
+                                              dv_location = coord[2] * 1000 * -1,
                                               injection_volume = vol)
                                          for inj_idx, (coord, vol) in enumerate(zip(meta_data.virus.infectionCoordinates,
                                                                                     meta_data.virus.injectionVolume))],
@@ -173,9 +173,9 @@ def main(meta_data_dir='./data/meta_data', reingest=True):
                     session_key, **brain_location_key,
                     photo_stim=stim_idx + 1,
                     photostim_device=photostim_devices[meta_data.photostim.photostimWavelength],
-                    ml_location=coord[0] * 1000,
-                    ap_location=coord[1] * 1000,
-                    dv_location=coord[2] * 1000), ignore_extra_fields=True)
+                    ap_location=coord[0] * 1000,
+                    ml_location=coord[1] * 1000,
+                    dv_location=coord[2] * 1000 * -1), ignore_extra_fields=True)
 
             print(f'\tInsert Photostim - Count: {len(meta_data.photostim.photostimLocation)}')
 

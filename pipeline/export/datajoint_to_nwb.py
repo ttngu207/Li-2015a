@@ -116,17 +116,18 @@ def export_to_nwb(session_key, nwb_output_dir=default_nwb_output_dir, save=False
         nwbfile.add_unit_column(name='cell_type', description='cell type (e.g. fast spiking or pyramidal)')
 
         for unit_key in (ephys.Unit * ephys.UnitCellType & probe_insertion).fetch('KEY'):
-            unit = (ephys.Unit * ephys.UnitCellType & probe_insertion & unit_key).proj(..., '-spike_times').fetch1()
-            if ephys.TrialSpikes & unit_key:
-                obs_intervals = np.array(list(zip(*(ephys.TrialSpikes * experiment.SessionTrial & unit_key).fetch(
-                    'start_time', 'stop_time')))).astype(float)
-                spike_times = np.hstack((ephys.TrialSpikes & unit_key).fetch('spike_times'))
-            else:  # the case of unavailable `TrialSpikes`
-                spike_times = (ephys.Unit & unit_key).fetch1('spike_times')
-                obs_intervals = np.array(list(zip(*(experiment.SessionTrial & unit_key).fetch(
-                    'start_time', 'stop_time')))).astype(float)
-                obs_intervals = [interval for interval in obs_intervals
-                                 if np.logical_and(spike_times >= interval[0], spike_times <= interval[-1]).any()]
+            unit = (ephys.Unit * ephys.UnitCellType & probe_insertion & unit_key).fetch1()
+
+            # build observation intervals: note the early trials where spikes were not recorded
+            first_spike, last_spike = unit['spike_times'][0], unit['spike_times'][-1]
+
+            obs_start = (experiment.SessionTrial & unit_key & f'start_time < {first_spike}').fetch(
+                'start_time', order_by='start_time DESC', limit=1)
+            obs_stop = (experiment.SessionTrial & unit_key & f'stop_time > {last_spike}').fetch(
+                'stop_time', order_by='stop_time', limit=1)
+
+            obs_intervals = [[obs_start[0] if obs_start.size > 0 else first_spike,
+                              obs_stop[0] if obs_start.size > 0 else last_spike]]
 
             # make an electrode table region (which electrode(s) is this unit coming from)
             nwbfile.add_unit(id=unit['unit'],
@@ -138,7 +139,7 @@ def export_to_nwb(session_key, nwb_output_dir=default_nwb_output_dir, save=False
                              posx=unit['unit_posx'],
                              posy=unit['unit_posy'],
                              cell_type=unit['cell_type'],
-                             spike_times=spike_times,
+                             spike_times=unit['spike_times'],
                              waveform_mean=np.mean(unit['waveform'], axis=0),
                              waveform_sd=np.std(unit['waveform'], axis=0))
 

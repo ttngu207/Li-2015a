@@ -91,7 +91,7 @@ def main(data_dir='./data/data_structure'):
         laser_power = sess_data.timeSeriesArrayHash.value.valueMatrix[:, 2]
 
         # ---- trial data ----
-        photostims = (experiment.Photostim * experiment.BrainLocation & session_key)
+        photostims = (experiment.Photostim & session_key)
 
         trial_zip = zip(sess_data.trialIds, sess_data.trialStartTimes * trial_time_conversion,
                         sess_data.trialTypeMat[:6, :].T, sess_data.trialTypeMat[6, :].T,
@@ -161,7 +161,7 @@ def main(data_dir='./data/data_structure'):
         # ---- units ----
         insert_key = (ephys.ProbeInsertion & session_key).fetch1()
         ap, dv = (ephys.ProbeInsertion.InsertionLocation & session_key).fetch1('ap_location', 'dv_location')
-        e_sites = {e: (y - ap, z - dv) for e, y, z in
+        e_sites = {e: (y - float(ap), z - float(dv)) for e, y, z in
                    zip(*(ephys.ProbeInsertion.ElectrodeSitePosition & session_key).fetch(
                        'electrode', 'electrode_posy', 'electrode_posz'))}
         tr_events = {tr: (float(stime), float(gotime)) for tr, stime, gotime in

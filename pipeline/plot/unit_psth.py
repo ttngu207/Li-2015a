@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 from pipeline.psth import TrialCondition
 from pipeline.psth import UnitPsth
 from pipeline import ephys, experiment
-from pipeline.plot import _get_photostim_time_and_duration, _get_trial_event_times
+from pipeline.plot.util import _get_photostim_time_and_duration, _get_trial_event_times
 
 
 _plt_xlim = [-3, 2]

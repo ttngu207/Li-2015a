@@ -338,8 +338,7 @@ class PeriodSelectivity(dj.Computed):
         # Verify insertion location is present,
         egpos = None
         try:
-            egpos = (ephys.ProbeInsertion.InsertionLocation
-                     * experiment.BrainLocation & key).fetch1()
+            egpos = (ephys.ProbeInsertion.InsertionLocation & key).fetch1()
         except dj.DataJointError as e:
             if 'exactly one tuple' in repr(e):
                 log.error('... Insertion Location missing. skipping')
@@ -499,12 +498,9 @@ def compute_CD_projected_psth(units, time_period=None):
              ipsi-trials CD projected trial-psth
              psth time-stamps
     """
-    unit_hemi = (ephys.ProbeInsertion.InsertionLocation * experiment.BrainLocation
-                 & units).fetch('hemisphere')
-    if len(set(unit_hemi)) != 1:
-        raise Exception('Units from both hemispheres found')
-    else:
-        unit_hemi = unit_hemi[0]
+    from .plot.util import _get_units_hemisphere
+
+    unit_hemi = _get_units_hemisphere(units)
 
     session_key = experiment.Session & units
     if len(session_key) != 1:

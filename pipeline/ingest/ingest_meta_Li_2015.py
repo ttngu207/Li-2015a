@@ -160,9 +160,9 @@ def main(meta_data_dir='./data/meta_data', reingest=True):
             photostim_locs = []
             for ba in set(photostimLocation):
                 coords = photostimCoordinates[photostimLocation == ba]
-                for coord in coords:
-                    photostim_locs.append((ba, 'left' if coord[1] < 0 else 'right', [coord]))
-                if len(coords) == 2:
+                if len(coords) < 2:
+                    photostim_locs.append((ba, 'left' if coords[0][1] < 0 else 'right', coords))
+                else:
                     photostim_locs.append((ba, 'both', coords))
 
             for stim_idx, (loc, hem, coords) in enumerate(photostim_locs):

@@ -38,7 +38,7 @@ lab.ElectrodeConfig.Electrode.insert(({'electrode_config_name': electrode_config
 
 # ==================== Photostim Trial Condition =====================
 
-stim_locs = [('left', 'alm'), ('right', 'alm'), ('both', 'alm')]
+stim_locs = [('left', 'alm'), ('right', 'alm'), ('bilateral', 'alm')]
 stim_periods = [None, 'sample', 'early_delay', 'middle_delay']
 
 trial_conditions = []
@@ -53,8 +53,8 @@ for hemi, brain_area in stim_locs:
                                 'task': 'audio delay',
                                 'task_protocol': 1,
                                 'early_lick': 'no early',
-                                'hemisphere': hemi,
-                                'brain_area': brain_area},
+                                'stim_laterality': hemi,
+                                'stim_brain_area': brain_area},
                              **({'trial_instruction': instruction} if instruction else {'_trial_instruction': 'non-performing'}),
                              **({'photostim_period': period, 'duration': stim_dur} if period else dict())}}
             trial_conditions.append(condition)

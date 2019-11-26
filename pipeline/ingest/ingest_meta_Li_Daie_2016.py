@@ -161,25 +161,27 @@ def main(meta_data_dir='./data/meta_data', reingest=True):
             photostim_locs = []
             for ba in set(photostimLocation):
                 coords = photostimCoordinates[photostimLocation == ba]
-                for coord in coords:
-                    photostim_locs.append((ba, 'left' if coord[1] < 0 else 'right', [coord]))
+                photostim_locs.extend([(ba, [coord]) for coord in coords])
                 if len(coords) == 2:
-                    photostim_locs.append((ba, 'both', coords))
+                    photostim_locs.append((ba, coords))
 
-            for stim_idx, (loc, hem, coords) in enumerate(photostim_locs):
+            for stim_idx, (loc, coords) in enumerate(photostim_locs):
 
                 experiment.Photostim.insert1(dict(
-                    session_key, brain_area=loc, hemisphere=hem, photo_stim=stim_idx + 1,
+                    session_key, photo_stim=stim_idx + 1,
                     photostim_device=photostim_devices[meta_data.photostim.photostimWavelength]),
                     ignore_extra_fields=True)
 
                 experiment.Photostim.PhotostimLocation.insert([
-                    dict(session_key, photo_stim=stim_idx + 1, skull_reference=skull_reference,
+                    dict(session_key,  photo_stim=stim_idx + 1,
+                         brain_area=loc, skull_reference=skull_reference,
                          ap_location=coord[0] * 1000,
                          ml_location=coord[1] * 1000,
-                         dv_location=coord[2] * 1000 * -1) for coord in coords], ignore_extra_fields = True)
+                         dv_location=coord[2] * 1000 * -1) for coord in coords], ignore_extra_fields=True)
 
             print(f'\tInsert Photostim - Count: {len(photostim_locs)}')
+
+    experiment.PhotostimBrainRegion.populate(display_progress=True)
 
 
 if __name__ == '__main__':

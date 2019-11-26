@@ -160,8 +160,16 @@ def _get_units_hemisphere(units):
     elif (ml_locations < 0).all():
         return 'left'
     else:
-        assert (ml_locations == 0).all()
+        assert (ml_locations == 0).all()  # sanity check
         raise ValueError('Ambiguous hemisphere: ML locations are all 0...')
+
+
+def _get_clustering_method(probe_insertion):
+    clustering_methods = (ephys.ClusteringMethod & (ephys.Unit & probe_insertion)).fetch('clustering_method')
+    if len(clustering_methods) == 1:
+        return clustering_methods[0]
+    else:
+        raise ValueError(f'Found multiple clustering methods: {clustering_methods}')
 
 
 def _jointplot_w_hue(data, x, y, hue=None, colormap=None,

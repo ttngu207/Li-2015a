@@ -91,7 +91,7 @@ def main(data_dir='./data/data_structure'):
         laser_power = sess_data.timeSeriesArrayHash.value.valueMatrix[:, 2]
 
         # ---- trial data ----
-        photostims = (experiment.Photostim & session_key)
+        photostims = (experiment.Photostim * experiment.PhotostimBrainRegion & session_key)
 
         trial_zip = zip(sess_data.trialIds, sess_data.trialStartTimes * trial_time_conversion,
                         sess_data.trialTypeMat[:6, :].T, sess_data.trialTypeMat[6, :].T,
@@ -136,7 +136,7 @@ def main(data_dir='./data/data_structure'):
                 pkey = dict(tkey)
                 photostim_trials.append(pkey)
                 if photostim_type in (1, 2):
-                    photostim_key = (photostims & {'brain_area': photostim_mapper[photostim_type.astype(int)]})
+                    photostim_key = (photostims & {'stim_brain_area': photostim_mapper[photostim_type.astype(int)]})
                     if photostim_key:
                         photostim_key = photostim_key.fetch1('KEY')
                         stim_power = laser_power[ts_trial == tr_id]

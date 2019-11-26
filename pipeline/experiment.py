@@ -65,8 +65,6 @@ class Photostim(dj.Manual):
     photo_stim :  smallint 
     ---
     -> lab.PhotostimDevice
-    -> lab.BrainArea
-    -> lab.Hemisphere
     waveform=null:  longblob       # normalized to maximal power. The value of the maximal power is specified for each PhotostimTrialEvent individually
     frequency=null: float  # (Hz) 
     """
@@ -81,8 +79,34 @@ class Photostim(dj.Manual):
         ---
         theta=null:       decimal(5, 2) # (degree)  rotation about the ml-axis 
         phi=null:         decimal(5, 2) # (degree)  rotation about the dv-axis
-        beta=null:        decimal(5, 2) # (degree)  rotation about the shank of the probe
+        -> lab.BrainArea
         """
+
+
+@schema
+class PhotostimBrainRegion(dj.Computed):
+    definition = """
+    -> Photostim
+    ---
+    -> lab.BrainArea.proj(stim_brain_area='brain_area')
+    stim_laterality: enum('left', 'right', 'bilateral')
+    """
+
+    def make(self, key):
+        brain_areas, ml_locations = (Photostim.PhotostimLocation & key).fetch('brain_area', 'ml_location')
+        if len(set(brain_areas)) > 1:
+            raise ValueError('Multiple different brain areas for one photostim protocol is unsupported')
+        if (ml_locations > 0).any() and (ml_locations < 0).any():
+            lat = 'bilateral'
+        elif (ml_locations > 0).all():
+            lat = 'right'
+        elif (ml_locations < 0).all():
+            lat = 'left'
+        else:
+            assert (ml_locations == 0).all()  # sanity check
+            raise ValueError('Ambiguous hemisphere: ML locations are all 0...')
+
+        self.insert1(dict(key, stim_brain_area=brain_areas[0], stim_laterality=lat))
 
 
 @schema

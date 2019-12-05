@@ -39,9 +39,9 @@ def main(data_dir='./data/data_structure'):
                             'pre_go_end_time': 0.9, 'period': 'early_delay'},
                         5: {'brain_area': 'alm', 'hemi': 'right', 'duration': 0.8, 'spot': 1,
                             'pre_go_end_time': 0.9, 'period': 'early_delay'},
-                        6: {'brain_area': 'alm', 'hemi': 'both', 'duration': 0.8, 'spot': 4,
+                        6: {'brain_area': 'alm', 'hemi': 'bilateral', 'duration': 0.8, 'spot': 4,
                             'pre_go_end_time': 0.9, 'period': 'early_delay'},
-                        7: {'brain_area': 'alm', 'hemi': 'both', 'duration': 0.8, 'spot': 1,
+                        7: {'brain_area': 'alm', 'hemi': 'bilateral', 'duration': 0.8, 'spot': 1,
                             'pre_go_end_time': 0.9, 'period': 'early_delay'},
                         8: {'brain_area': 'alm', 'hemi': 'left', 'duration': 0.8, 'spot': 4,
                             'pre_go_end_time': 0.9, 'period': 'early_delay'},
@@ -106,7 +106,7 @@ def main(data_dir='./data/data_structure'):
         laser_power = sess_data.timeSeriesArrayHash.value.valueMatrix[:, 2]
 
         # ---- trial data ----
-        photostims = (experiment.Photostim * experiment.BrainLocation & session_key)
+        photostims = (experiment.Photostim * experiment.PhotostimBrainRegion & session_key)
 
         trial_zip = zip(sess_data.trialIds, sess_data.trialStartTimes * trial_time_conversion,
                         sess_data.trialTypeMat[:6, :].T, sess_data.trialTypeMat[6, :].T,
@@ -153,8 +153,8 @@ def main(data_dir='./data/data_structure'):
                 photostim_type = photostim_type.astype(int)
                 if photostim_type in photostim_mapper:
                     photstim_detail = photostim_mapper[photostim_type]
-                    photostim_key = (photostims & {'brain_area': photstim_detail['brain_area'],
-                                                   'hemisphere': photstim_detail['hemi']})
+                    photostim_key = (photostims & {'stim_brain_area': photstim_detail['brain_area'],
+                                                   'stim_laterality': photstim_detail['hemi']})
                     if photostim_key:
                         photostim_key = photostim_key.fetch1('KEY')
                         stim_power = laser_power[ts_trial == tr_id]
@@ -182,7 +182,7 @@ def main(data_dir='./data/data_structure'):
         # ---- units ----
         insert_key = (ephys.ProbeInsertion & session_key).fetch1()
         ap, dv = (ephys.ProbeInsertion.InsertionLocation & session_key).fetch1('ap_location', 'dv_location')
-        e_sites = {e: (y - ap, z - dv) for e, y, z in
+        e_sites = {e: (y - float(ap), z - float(dv)) for e, y, z in
                    zip(*(ephys.ProbeInsertion.ElectrodeSitePosition & session_key).fetch(
                        'electrode', 'electrode_posy', 'electrode_posz'))}
         tr_events = {tr: (float(stime), float(gotime)) for tr, stime, gotime in

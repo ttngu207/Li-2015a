@@ -25,17 +25,17 @@ hardware_filter = 'Bandpass filtered 300-6K Hz'
 ecephys_fs = 19531.25
 institution = 'Janelia Research Campus'
 
-if dj.config['custom']['database.prefix'] == 'li2015_':
-    related_publications = 'doi:10.1038/nature14178'
-    experiment_description = 'Extracellular electrophysiology recordings with optogenetic perturbations performed on anterior lateral region of the mouse cortex during object location discrimination task'
-    keywords = ['motor planning', 'preparatory activity', 'whiskers',
-                'optogenetic perturbations', 'extracellular electrophysiology']
-
-elif dj.config['custom']['database.prefix'] == 'lidaie2016_':
-    related_publications = 'doi:10.1038/nature17643'
-    experiment_description = 'Extracellular electrophysiology recordings with optogenetic perturbations performed on anterior lateral region of the mouse cortex during object location discrimination task'
-    keywords = ['motor planning', 'premotor cortex', 'whiskers',
-                'optogenetic perturbations', 'extracellular electrophysiology']
+session_description_mapper = {
+    'li2015': dict(
+        related_publications='doi:10.1038/nature14178',
+        experiment_description='Extracellular electrophysiology recordings with optogenetic perturbations performed on anterior lateral region of the mouse cortex during object location discrimination task',
+        keywords=['motor planning', 'preparatory activity', 'whiskers',
+                    'optogenetic perturbations', 'extracellular electrophysiology']),
+    'lidaie2016': dict(
+        related_publications='doi:10.1038/nature17643',
+        experiment_description='Extracellular electrophysiology recordings with optogenetic perturbations performed on anterior lateral region of the mouse cortex during object location discrimination task',
+        keywords=['motor planning', 'premotor cortex', 'whiskers',
+                    'optogenetic perturbations', 'extracellular electrophysiology'])}
 
 
 def export_to_nwb(session_key, nwb_output_dir=default_nwb_output_dir, save=False, overwrite=False):
@@ -45,6 +45,8 @@ def export_to_nwb(session_key, nwb_output_dir=default_nwb_output_dir, save=False
     # ===============================================================================
     # ============================== META INFORMATION ===============================
     # ===============================================================================
+
+    sess_desc = session_description_mapper[(experiment.ProjectSession & session_key).fetch1('project_name')]
 
     # -- NWB file - a NWB2.0 file for each session
     nwbfile = NWBFile(identifier='_'.join(
@@ -56,9 +58,9 @@ def export_to_nwb(session_key, nwb_output_dir=default_nwb_output_dir, save=False
         file_create_date=datetime.now(tzlocal()),
         experimenter=this_session['username'],
         institution=institution,
-        experiment_description=experiment_description,
-        related_publications=related_publications,
-        keywords=keywords)
+        experiment_description=sess_desc['experiment_description'],
+        related_publications=sess_desc['related_publications'],
+        keywords=sess_desc['keywords'])
 
     # -- subject
     subj = (lab.Subject & session_key).aggr(lab.Subject.Strain, ..., strains='GROUP_CONCAT(animal_strain)').fetch1()
@@ -84,7 +86,9 @@ def export_to_nwb(session_key, nwb_output_dir=default_nwb_output_dir, save=False
     Each probe insertion is associated with one ElectrodeConfiguration (which may define multiple electrode groups)
     """
 
-    dj_insert_location = ephys.ProbeInsertion.InsertionLocation * experiment.BrainLocation
+    dj_insert_location = ephys.ProbeInsertion.InsertionLocation.aggr(
+        ephys.ProbeInsertion.RecordableBrainRegion.proj(brain_region='CONCAT(hemisphere, " ", brain_area)'), ...,
+        brain_regions='GROUP_CONCAT(brain_region)')
 
     for probe_insertion in ephys.ProbeInsertion & session_key:
         electrode_config = (lab.ElectrodeConfig & probe_insertion).fetch1()
@@ -126,8 +130,8 @@ def export_to_nwb(session_key, nwb_output_dir=default_nwb_output_dir, save=False
             obs_stop = (experiment.SessionTrial & unit_key & f'stop_time > {last_spike}').fetch(
                 'stop_time', order_by='stop_time', limit=1)
 
-            obs_intervals = [[obs_start[0] if obs_start.size > 0 else first_spike,
-                              obs_stop[0] if obs_start.size > 0 else last_spike]]
+            obs_intervals = [[float(obs_start[0]) if obs_start.size > 0 else first_spike,
+                              float(obs_stop[0]) if obs_stop.size > 0 else last_spike]]
 
             # make an electrode table region (which electrode(s) is this unit coming from)
             nwbfile.add_unit(id=unit['unit'],
@@ -162,31 +166,33 @@ def export_to_nwb(session_key, nwb_output_dir=default_nwb_output_dir, save=False
     # ============================= PHOTO-STIMULATION ===============================
     # ===============================================================================
     stim_sites = {}
-    for photostim in experiment.Photostim * experiment.BrainLocation * lab.PhotostimDevice & session_key:
+    for photostim in experiment.Photostim * experiment.PhotostimBrainRegion * lab.PhotostimDevice & session_key:
 
         stim_device = (nwbfile.get_device(photostim['photostim_device'])
                        if photostim['photostim_device'] in nwbfile.devices
                        else nwbfile.create_device(name=photostim['photostim_device']))
 
         stim_site = pynwb.ogen.OptogeneticStimulusSite(
-            name=photostim['brain_location_name'],
+            name=photostim['stim_laterality'] + ' ' + photostim['stim_brain_area'],
             device=stim_device,
             excitation_lambda=float(photostim['excitation_wavelength']),
-            location=json.dumps({k: str(v) for k, v in photostim.items()
-                                if k in dj_insert_location.heading.names and k not in dj_insert_location.primary_key}),
+            location=json.dumps([{k: v for k, v in stim_locs.items()
+                                  if k not in experiment.Photostim.primary_key}
+                                 for stim_locs in (experiment.Photostim.PhotostimLocation.proj(..., '-brain_area')
+                                                   & photostim).fetch(as_dict=True)], default=str),
             description='')
         nwbfile.add_ogen_site(stim_site)
         stim_sites[photostim['photo_stim']] = stim_site
 
     # re-concatenating trialized photostim traces
     dj_photostim = (experiment.PhotostimTrace * experiment.SessionTrial * experiment.PhotostimEvent
-                    * experiment.Photostim * experiment.BrainLocation & session_key)
+                    * experiment.Photostim & session_key)
 
     for photo_stim, stim_site in stim_sites.items():
         if dj_photostim & {'photo_stim': photo_stim}:
-            aom_input_trace, laser_power, time_vecs, trial_starts, brain_location_name = (
+            aom_input_trace, laser_power, time_vecs, trial_starts = (
                     dj_photostim & {'photo_stim': photo_stim}).fetch(
-                'aom_input_trace', 'laser_power', 'photostim_timestamps', 'start_time', 'brain_location_name')
+                'aom_input_trace', 'laser_power', 'photostim_timestamps', 'start_time')
 
             aom_series = pynwb.ogen.OptogeneticSeries(
                 name=stim_site.name + '_aom_input_trace',

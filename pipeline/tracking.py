@@ -12,7 +12,6 @@ schema = dj.schema(get_schema_name('tracking'))
 [experiment]  # NOQA flake8
 
 
-
 @schema
 class LickTrace(dj.Imported):
     definition = """

@@ -125,7 +125,11 @@ def export_to_nwb(session_key, nwb_output_dir=default_nwb_output_dir, save=False
             if ephys.TrialSpikes & unit_key:
                 obs_intervals = np.array(list(zip(*(ephys.TrialSpikes * experiment.SessionTrial & unit_key).fetch(
                     'start_time', 'stop_time')))).astype(float)
-                spike_times = np.hstack((ephys.TrialSpikes & unit_key).fetch('spike_times'))
+                tr_spike_times, tr_start, tr_go = (ephys.TrialSpikes * experiment.SessionTrial
+                                                   * (experiment.TrialEvent & 'trial_event_type = "go"')
+                                                   & unit_key).fetch('spike_times', 'start_time', 'trial_event_time')
+                spike_times = np.hstack([spks + float(t_go) + float(t_start)
+                                         for spks, t_go, t_start in zip(tr_spike_times, tr_start, tr_go)])
             else:  # the case of unavailable `TrialSpikes`
                 spike_times = (ephys.Unit & unit_key).fetch1('spike_times')
                 obs_intervals = np.array(list(zip(*(experiment.SessionTrial & unit_key).fetch(
@@ -196,12 +200,12 @@ def export_to_nwb(session_key, nwb_output_dir=default_nwb_output_dir, save=False
 
             aom_series = pynwb.ogen.OptogeneticSeries(
                 name=stim_site.name + '_aom_input_trace',
-                site=stim_site, resolution=0.0, conversion=1e-3,
+                site=stim_site, conversion=1e-3,
                 data=np.hstack(aom_input_trace),
                 timestamps=np.hstack(time_vecs + trial_starts.astype(float)))
             laser_series = pynwb.ogen.OptogeneticSeries(
                 name=stim_site.name + '_laser_power',
-                site=stim_site, resolution=0.0, conversion=1e-3,
+                site=stim_site, conversion=1e-3,
                 data=np.hstack(laser_power),
                 timestamps=np.hstack(time_vecs + trial_starts.astype(float)))
 
